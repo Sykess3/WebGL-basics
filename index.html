@@ -1,31 +1,127 @@
 <!DOCTYPE html>
-<html><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<html>
+
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 
-<title>PA#1</title>
-<style>
-    body {
-        background-color: #EEEEEE;
-    }
-</style>
+    <title>PA#2</title>
 
-<script src="./Utils/trackball-rotator.js"></script>
-<script src="./Utils/m4.js"></script>
-<script src="./shader.gpu"></script>
-<script src="./main.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-EVSTQN3/azprG1Anm3QDgpJLIm9Nao0Yz1ztcQTwFspd3yD65VohhpuuCOmLASjC" crossorigin="anonymous">
+
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/2.1.1/jquery.min.js"></script>
+    <script src="./Utils/trackball-rotator.js"></script>
+    <script src="./Utils/m4.js"></script>
+    <script src="./shader.gpu"></script>
+    <script src="./main.js"></script>
 
 </head>
+
 <body onload="init()">
 
-<h2>A Cube with "Trackball" Mouse Rotation</h2>
-
-<p id="message">Drag your mouse on the cube to rotate it.<br>
-(On a touch screen, you can use your finger.)</p>
+    <h2 class="m-3" style="text-align: center;">PA2</h2>
 
 
-<div id="canvas-holder">
-   <canvas width="600" height="600" id="webglcanvas" style="background-color:red"></canvas>
-</div>
+    <div class="container mt-5">
+        <div class="col align-items-center">
+            <div class="row" style="display: flex; width: 100%;">
+                <span class="input-group-text mb-2" style="flex: 1;">Directional Light</span>
+                <span class="input-group-text mb-2" style="flex: 1;">Gouraud Shading</span>
+                <span class="input-group-text mb-2" style="flex: 1;">Perspective Projection</span>
+                <span class="input-group-text mb-2" style="flex: 1;">Normal Analytics</span>
+            </div>
+            
+            <div class="col mb-4 text-center">
+                <span class="input-group-text mb-2 " style="background-color: teal"> Use arrows or WASD for moving model</span>
+            </div>
+            <div class="col mb-4 text-center">
+                <div id="canvas-holder">
+                    <canvas class="rounded-1" width="600" height="600" id="webglcanvas" style="background-color: teal"></canvas>
+                </div>
+            </div>
+            <div class="col">
+                <div class="me-5">
+                    <div class="input-group mb-3">
+                        <span class="input-group-text">Ambient Color</span>
+                        <input id="AmbientColor" type="color" class="form-control h-auto d-inline-block" aria-describedby="AmbientColor" value="#191919">
+                    </div>
+                    <div class="input-group mb-3">
+                        <span class="input-group-text">Diffuse Color</span>
+                        <input id="DiffuseColor" type="color" class="form-control h-auto d-inline-block" aria-describedby="DiffuseColor" value="#B21919">
+                    </div>
+                    <div class="input-group mb-3">
+                        <span class="input-group-text">Specular Color</span>
+                        <input id="SpecularColor" type="color" class="form-control h-auto d-inline-block" aria-describedby="SpecularColor" value="#DCDCDC">
+                    </div>
+                    <label for="Shininess" class="form-label">Shininess (or press +/-)</label>
+                    <span class="badge bg-primary" id="Shininess_text">12</span>
+                    <input type="range" class="form-range" min="12" max="32" step="1" id="Shininess" value="1">
+                    <label for="scale" class="form-label">Zoom (or turn the mouse wheel)</label>
+                    <span class="badge bg-primary" id="scale_text">1</span>
+                    <input type="range" class="form-range" min="0" max="2" step="0.125" id="scale" value="1">
+
+                    <label for="LightIntensity" class="form-label">Light Intensity</label>
+                    <span class="badge bg-primary" id="LightIntensity_text">1</span>
+                    <input type="range" class="form-range" min="0" max="5" step="0.1" id="LightIntensity" value="1">
+                </div>
+            </div>
+        </div>
+    </div>
+
+</body>
+
+<script>
+    var input_a = document.getElementById("AmbientColor");
+    var input_d = document.getElementById("DiffuseColor");
+    var input_s = document.getElementById("SpecularColor");
+    var input_li = document.getElementById("LightIntensity");
+    var input_sh = document.getElementById("Shininess");
+    var input_sc = document.getElementById("scale");
 
 
-</body></html>
+    input_a.addEventListener("input", function() {
+        AmbientColor = [hexToRgb(this.value).r / 255, hexToRgb(this.value).g / 255, hexToRgb(this.value).b / 255];
+        draw();
+    }, false);
+
+    input_d.addEventListener("input", function() {
+        DiffuseColor = [hexToRgb(this.value).r / 255, hexToRgb(this.value).g / 255, hexToRgb(this.value).b / 255];
+        draw();
+    }, false);
+
+    input_s.addEventListener("input", function() {
+        SpecularColor = [hexToRgb(this.value).r / 255, hexToRgb(this.value).g / 255, hexToRgb(this.value).b / 255];
+        draw();
+    }, false);
+
+    input_sh.addEventListener("input", function() {
+        Shininess = this.value;
+        document.getElementById("Shininess_text").innerHTML = Shininess;
+        draw();
+    }, false);
+
+    input_li.addEventListener("input", function() {
+        LightIntensity = this.value;
+        document.getElementById("LightIntensity_text").innerHTML = LightIntensity;
+        draw();
+    }, false);
+
+    input_sc.addEventListener("input", function() {
+        scale = this.value;
+        document.getElementById("scale_text").innerHTML = scale;
+        draw();
+    }, false);
+
+
+    function hexToRgb(hex) {
+        var result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+        return result ? {
+            r: parseInt(result[1], 16),
+            g: parseInt(result[2], 16),
+            b: parseInt(result[3], 16)
+        } : null;
+    }
+
+</script>
+
+</html>
