@@ -14,7 +14,7 @@ uniform vec3 lsAmbientColor;
 uniform vec3 lsDiffuseColor;
 uniform vec3 lsSpecularColor;
 
-uniform vec3 LightWorldPosition;
+uniform vec3 LightDirection;
 uniform vec3 CamWorldPosition;
 
 varying vec4 color;
@@ -22,7 +22,7 @@ varying vec4 color;
 void main() {
     vec3 normalInterp = (WorldInverseTranspose * vec4(normalize(normal), 0.0)).xyz;
     vec3 N = normalize(normalInterp);
-    vec3 L = normalize(vertex - LightWorldPosition);
+    vec3 L = normalize(LightDirection);
     gl_Position = ModelViewProjectionMatrix * vec4(vertex,1.0);
 
     vec3 reflectLighDir = normalize(reflect(L, N)); 

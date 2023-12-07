@@ -75,7 +75,7 @@ function ShaderProgram(name, program) {
     this.iMatSpecularColor = -1;
     this.iMatShininess = -1;
 
-    this.iLightWorldPosition = -1;
+    this.iLightDirection = -1;
     this.iCamWorldPosition = -1;
 
     this.Use = function () {
@@ -123,7 +123,7 @@ function draw() {
     gl.uniform3fv(shProgram.iLSSpecularColor, [1, 1, 1]);
 
     gl.uniform3fv(shProgram.iCamWorldPosition, [0, 0, -20]);
-    gl.uniform3fv(shProgram.iLightWorldPosition, [0, 0, -20]);
+    gl.uniform3fv(shProgram.iLightDirection, [0, 0, 1]);
     surface.Draw();
 }
 
@@ -132,7 +132,7 @@ function CreateSurfaceData() {
     let vertexList = [];
     let normalsList = [];
 
-    let phiMax = Math.PI * 2.1;
+    let phiMax = Math.PI * 2;
     let phiMin = 0;
     let vMax = Math.PI * 0.5;
     let vMin = 0;
@@ -250,7 +250,7 @@ function initGL() {
     shProgram.iLSDiffuseColor = gl.getUniformLocation(prog, "lsDiffuseColor");
     shProgram.iLSSpecularColor = gl.getUniformLocation(prog, "lsSpecularColor");
 
-    shProgram.iLightWorldPosition = gl.getUniformLocation(prog, "LightWorldPosition");
+    shProgram.iLightDirection = gl.getUniformLocation(prog, "LightDirection");
     shProgram.iCamWorldPosition = gl.getUniformLocation(prog, "CamWorldPosition");
 
 
