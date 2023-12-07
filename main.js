@@ -94,7 +94,7 @@ function draw() {
 
 
     /* Set the values of the projection transformation */
-    let projection = m4.perspective(scale, 1, 8, 12);
+    let projection = m4.perspective(scale, 2, 8, 12);
 
     /* Get the view matrix from the SimpleRotator object.*/
     let modelView = spaceball.getViewMatrix();
