@@ -41,6 +41,10 @@
             </div>
             <div class="col">
                 <div class="me-5">
+                    <label for="radius" class="form-label">Radius</label>
+                        <span class="badge bg-primary" id="radius_text">1</span>
+                    <input type="range" class="form-range" min="0" max="5" step="0.1" id="radius" value="1">
+
                     <div class="input-group mb-3">
                         <span class="input-group-text">Ambient Color</span>
                         <input id="AmbientColor" type="color" class="form-control h-auto d-inline-block" aria-describedby="AmbientColor" value="#191919">
@@ -77,6 +81,7 @@
     var input_li = document.getElementById("LightIntensity");
     var input_sh = document.getElementById("Shininess");
     var input_sc = document.getElementById("scale");
+    var input_r = document.getElementById("radius");
 
 
     input_a.addEventListener("input", function() {
@@ -109,6 +114,13 @@
     input_sc.addEventListener("input", function() {
         scale = this.value;
         document.getElementById("scale_text").innerHTML = scale;
+        draw();
+    }, false);
+
+    input_r.addEventListener("input", function() {
+        ModelRadius = this.value;
+        document.getElementById("radius_text").innerHTML = ModelRadius;
+        BuildSurface();
         draw();
     }, false);
 

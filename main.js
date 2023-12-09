@@ -5,6 +5,7 @@ let surface;                    // A surface model
 let shProgram;                  // A shader program
 let spaceball;                  // A SimpleRotator object that lets the user rotate the view by mouse.
 
+let ModelRadius = 1;
 let scale = 1.0;
 let AmbientColor = [0.1, 0.1, 0.1];
 let DiffuseColor = [0.7, 0.1, 0.1];
@@ -217,7 +218,7 @@ function CalcDerivativeV(u, v, DeltaV, xyz) {
 }
 
 function CalculateCorrugatedSpherePoint(phi, v) {
-    let R = 1;
+    let R = ModelRadius;
     let a = 0.24;
     let n = 6;
     let x = (R * Math.cos(v) - a * (1 - Math.sin(v)) * Math.abs(Math.cos(n * phi))) * Math.cos(phi);
@@ -253,12 +254,16 @@ function initGL() {
     shProgram.iLightDirection = gl.getUniformLocation(prog, "LightDirection");
     shProgram.iCamWorldPosition = gl.getUniformLocation(prog, "CamWorldPosition");
 
+    BuildSurface();
 
+    gl.enable(gl.DEPTH_TEST);
+    gl.enable(gl.CULL_FACE);
+}
+
+function BuildSurface(){
     surface = new Model('Surface');
     let data = CreateSurfaceData();
     surface.BufferData(data[0], data[1]);
-
-    gl.enable(gl.DEPTH_TEST);
 }
 
 
