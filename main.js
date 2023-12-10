@@ -4,6 +4,10 @@ let gl;                         // The webgl context.
 let surface;                    // A surface model
 let shProgram;                  // A shader program
 let spaceball;                  // A SimpleRotator object that lets the user rotate the view by mouse.
+let lineProgram;
+let line;
+let segment;
+let segmentProgram;
 
 let ModelRadius = 1;
 let scale = 1.0;
@@ -12,20 +16,89 @@ let DiffuseColor = [0.7, 0.1, 0.1];
 let SpecularColor = [0.97, 0.97, 0.97];
 let Shininess = 12;
 let LightIntensity = 1;
-let World_X = -1;
+let World_X = 0;
 let World_Y = 0;
-let World_Z = -10;
+let World_Z = 0;
+let CameraPosition = [0, 0, -10]
+
+let WorldOrigin = [0, 0, 0]
+
+let LightPosition = [0, 0, 5]
+
+let isAnimating = false;
+let fps = 60;
+let reqAnim;
+let currentAnimationTime = 0;
+let animationSpeed = 0;
+let AnimationVelocity = [1, 1, 0];
+let ShowPath = false;
+
+function SwitchAnimation(){
+
+    isAnimating = !isAnimating;
+    if(!isAnimating){
+        window.cancelAnimationFrame(reqAnim);
+    }
+    else{
+        ExecuteAnimation();
+    }
+
+}
+
+function GetNormalizedAnimVelocity(){
+    return m4.normalize(AnimationVelocity);
+}
+
+function ExecuteAnimation(){
+    if(!isAnimating){
+        return;
+    }
+    let deltaTime = 1000 / fps;
+    LightPosition[0] = (Math.sin(currentAnimationTime / 500) * 2 * ModelRadius * GetNormalizedAnimVelocity()[0]);
+    LightPosition[1] = (Math.sin(currentAnimationTime / 500) * 2 * ModelRadius * GetNormalizedAnimVelocity()[1]);
+
+    BuildLine();
+    draw();
+    currentAnimationTime += deltaTime;
+    setTimeout(() => {
+        reqAnim = window.requestAnimationFrame(ExecuteAnimation);    
+    }, deltaTime);
+}
 
 function deg2rad(angle) {
     return angle * Math.PI / 180;
 }
 
+function Line(name, program){
+    this.position = m4.translation(0, 0, 0);
+    this.name = name;
+    this.iLightDirectionLineBuffer = gl.createBuffer();
+    this.program = program;
 
+    this.BufferData = function (data){
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.iLightDirectionLineBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(data), gl.STREAM_DRAW)
+    }
+
+    this.Draw = function (projectionViewMatrix) {
+        this.program.Use();
+
+        gl.uniformMatrix4fv(this.program.iModelViewProjectionMatrix, false, m4.multiply(projectionViewMatrix, this.position));
+        gl.uniform4fv(this.program.iSolidColor, [0, 1, 0, 1]);
+
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.iLightDirectionLineBuffer);
+        gl.vertexAttribPointer(this.program.iAttribVertex, 3, gl.FLOAT, false, 0, 0);
+        gl.enableVertexAttribArray(this.program.iAttribVertex);
+
+        gl.drawArrays(gl.LINE_STRIP, 0, 2);
+    }
+}
 // Constructor
 function Model(name) {
     this.name = name;
     this.iVertexBuffer = gl.createBuffer();
     this.iNormalBuffer = gl.createBuffer();
+
     this.count = 0;
 
     this.BufferData = function (vertices, normals) {
@@ -39,8 +112,36 @@ function Model(name) {
         this.count = vertices.length / 3;
     }
 
-    this.Draw = function () {
+    this.Draw = function (projectionViewMatrix) {
 
+            /*  the view matrix from the SimpleRotator object.*/
+        let rotation = spaceball.getViewMatrix();
+    
+        let translation = m4.translation(World_X, World_Y, World_Z);
+    
+        let modelMatrix = m4.multiply(translation, rotation);
+    
+        /* Multiply the projection matrix times the modelview matrix to give the
+           combined transformation matrix, and send that to the shader program. */
+        let modelViewProjection = m4.multiply(projectionViewMatrix, modelMatrix);
+
+        var worldInverseMatrix = m4.inverse(modelMatrix);
+        var worldInverseTransposeMatrix = m4.transpose(worldInverseMatrix);
+        gl.uniformMatrix4fv(shProgram.iModelViewProjectionMatrix, false, modelViewProjection);
+        gl.uniformMatrix4fv(shProgram.iWorldInverseTranspose, false, worldInverseTransposeMatrix);
+    
+        gl.uniform3fv(shProgram.iMatAmbientColor, AmbientColor);
+        gl.uniform3fv(shProgram.iMatDiffuseColor, DiffuseColor);
+        gl.uniform3fv(shProgram.iMatSpecularColor, SpecularColor);
+        gl.uniform1f(shProgram.iMatShininess, Shininess);
+    
+        gl.uniform3fv(shProgram.iLSAmbientColor, [0.1, 0.1, 0.1]);
+        gl.uniform3fv(shProgram.iLSDiffuseColor, [LightIntensity, LightIntensity, LightIntensity]);
+        gl.uniform3fv(shProgram.iLSSpecularColor, [1, 1, 1]);
+    
+        gl.uniform3fv(shProgram.iCamWorldPosition, CameraPosition);
+        gl.uniform3fv(shProgram.iLightDirection, GetDirLightDirection());
+        
         gl.bindBuffer(gl.ARRAY_BUFFER, this.iVertexBuffer);
         gl.vertexAttribPointer(shProgram.iAttribVertex, 3, gl.FLOAT, false, 0, 0);
         gl.enableVertexAttribArray(shProgram.iAttribVertex);
@@ -60,7 +161,7 @@ function ShaderProgram(name, program) {
     this.name = name;
     this.prog = program;
 
-
+    this.iSolidColor = -1;
     this.iAttribVertex = -1;
     this.iNormalVertex = -1;
 
@@ -84,6 +185,11 @@ function ShaderProgram(name, program) {
     }
 }
 
+function SwitchShowPath(){
+    ShowPath = !ShowPath;
+    draw();
+}
+
 
 /* Draws a colored cube, along with a set of coordinate axes.
  * (Note that the use of the above drawPrimitive function is not an efficient
@@ -95,37 +201,26 @@ function draw() {
 
 
     /* Set the values of the projection transformation */
-    let projection = m4.perspective(scale, 2, 8, 12);
+    let projectionMatrix = m4.perspective(scale, 2, 1, 40);
+    const viewMatrix = m4.lookAt(CameraPosition, WorldOrigin, [0, 1, 0]);
+    const camRotation = m4.axisRotation([0, 1, 0], 179);
+    const projectionViewMatrix = m4.multiply(projectionMatrix, m4.multiply(viewMatrix, camRotation));
 
-    /* Get the view matrix from the SimpleRotator object.*/
-    let modelView = spaceball.getViewMatrix();
-    let WorldMatrix = m4.translation(World_X, World_Y, World_Z);
-    let rotateToPointZero = m4.axisRotation([0.707, 0.707, 0], 0.7);
+    lineProgram.Use();
+    line.Draw(projectionViewMatrix);
 
-    let matAccum0 = m4.multiply(rotateToPointZero, modelView);
-    let matAccum1 = m4.multiply(WorldMatrix, matAccum0);
+    if(ShowPath){
+        segmentProgram.Use();
+        segment.Draw(projectionViewMatrix);
+    }
+    
+    shProgram.Use()
+    surface.Draw(projectionViewMatrix);
+}
 
-    /* Multiply the projection matrix times the modelview matrix to give the
-       combined transformation matrix, and send that to the shader program. */
-    let modelViewProjection = m4.multiply(projection, matAccum1);
-
-    var worldInverseMatrix = m4.inverse(matAccum1);
-    var worldInverseTransposeMatrix = m4.transpose(worldInverseMatrix);
-    gl.uniformMatrix4fv(shProgram.iModelViewProjectionMatrix, false, modelViewProjection);
-    gl.uniformMatrix4fv(shProgram.iWorldInverseTranspose, false, worldInverseTransposeMatrix);
-
-    gl.uniform3fv(shProgram.iMatAmbientColor, AmbientColor);
-    gl.uniform3fv(shProgram.iMatDiffuseColor, DiffuseColor);
-    gl.uniform3fv(shProgram.iMatSpecularColor, SpecularColor);
-    gl.uniform1f(shProgram.iMatShininess, Shininess);
-
-    gl.uniform3fv(shProgram.iLSAmbientColor, [0.1, 0.1, 0.1]);
-    gl.uniform3fv(shProgram.iLSDiffuseColor, [LightIntensity, LightIntensity, LightIntensity]);
-    gl.uniform3fv(shProgram.iLSSpecularColor, [1, 1, 1]);
-
-    gl.uniform3fv(shProgram.iCamWorldPosition, [0, 0, -20]);
-    gl.uniform3fv(shProgram.iLightDirection, [0, 0, 1]);
-    surface.Draw();
+function GetDirLightDirection(){
+    let test = m4.scaleVector(m4.normalize(LightPosition), -1); 
+    return test;
 }
 
 
@@ -231,6 +326,61 @@ function CalculateCorrugatedSpherePoint(phi, v) {
 
 /* Initialize the WebGL context. Called from init() */
 function initGL() {
+
+    SetupSurface();
+    BuildSurface();
+
+    SetupLine();
+    BuildLine();
+
+    SetupSegment();
+    BuildSegment();
+
+    gl.enable(gl.DEPTH_TEST);
+    gl.enable(gl.CULL_FACE);
+}
+
+function SetupSegment(){
+    let prog = createProgram(gl, LineVertexShaderSource, LineFragmentShaderSource);
+
+    segmentProgram = new ShaderProgram('Segment', prog);
+    segmentProgram.Use();
+
+    segmentProgram.iAttribVertex = gl.getAttribLocation(prog, "vertex");
+    segmentProgram.iModelViewProjectionMatrix = gl.getUniformLocation(prog, "ModelViewProjectionMatrix");
+    segmentProgram.iSolidColor = gl.getUniformLocation(prog, "color");
+}
+
+function BuildSegment(){
+    segment = new Line("Segment", segmentProgram);
+    segment.BufferData([...m4.scaleVector(GetNormalizedAnimVelocity(), -ModelRadius * 0.95), ...m4.scaleVector(GetNormalizedAnimVelocity(), ModelRadius * 0.95)]);
+    segment.position = m4.translation(0, 2, 0);
+}
+
+function SetupLine(){
+    let prog = createProgram(gl, LineVertexShaderSource, LineFragmentShaderSource);
+
+    lineProgram = new ShaderProgram('Line', prog);
+    lineProgram.Use();
+
+    lineProgram.iAttribVertex = gl.getAttribLocation(prog, "vertex");
+    lineProgram.iModelViewProjectionMatrix = gl.getUniformLocation(prog, "ModelViewProjectionMatrix");
+    lineProgram.iSolidColor = gl.getUniformLocation(prog, "color");
+}
+
+function BuildLine(){
+    line = new Line("Line", lineProgram);
+    line.BufferData([...WorldOrigin, ...LightPosition])
+}
+
+function BuildSurface(){
+    surface = new Model('Surface');
+    let data = CreateSurfaceData();
+    surface.BufferData(data[0], data[1]);
+}
+
+function SetupSurface(){
+
     let prog = createProgram(gl, vertexShaderSource, fragmentShaderSource);
 
     shProgram = new ShaderProgram('Basic', prog);
@@ -253,17 +403,6 @@ function initGL() {
 
     shProgram.iLightDirection = gl.getUniformLocation(prog, "LightDirection");
     shProgram.iCamWorldPosition = gl.getUniformLocation(prog, "CamWorldPosition");
-
-    BuildSurface();
-
-    gl.enable(gl.DEPTH_TEST);
-    gl.enable(gl.CULL_FACE);
-}
-
-function BuildSurface(){
-    surface = new Model('Surface');
-    let data = CreateSurfaceData();
-    surface.BufferData(data[0], data[1]);
 }
 
 

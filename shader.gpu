@@ -25,11 +25,11 @@ void main() {
     vec3 L = normalize(LightDirection);
     gl_Position = ModelViewProjectionMatrix * vec4(vertex,1.0);
 
-    vec3 reflectLighDir = normalize(reflect(L, N)); 
+    vec3 reflectLighDir = normalize(reflect(-L, N)); 
     vec3 camViewDir = normalize(CamWorldPosition - vertex);
 
     vec3 ambient = matAmbientColor * lsAmbientColor;
-    vec3 diffuse = matDiffuseColor * lsDiffuseColor * max(0.0, dot(N, -L));
+    vec3 diffuse = matDiffuseColor * lsDiffuseColor * max(0.0, dot(N, L));
     vec3 specular = matSpecularColor * lsSpecularColor * pow(max(0.0, dot(camViewDir, reflectLighDir)), matShininess);
 
     color = vec4(ambient + diffuse + specular, 1.0);
@@ -45,6 +45,32 @@ const fragmentShaderSource = `
 #endif
 
 varying vec4 color;
+void main() {
+    gl_FragColor = color;
+}`;
+
+
+
+
+// Vertex shader
+const LineVertexShaderSource = `
+attribute vec3 vertex;
+uniform mat4 ModelViewProjectionMatrix;
+
+void main() {
+    gl_Position = ModelViewProjectionMatrix * vec4(vertex,1.0);
+}`;
+
+
+// Fragment shader
+const LineFragmentShaderSource = `
+#ifdef GL_FRAGMENT_PRECISION_HIGH
+   precision highp float;
+#else
+   precision mediump float;
+#endif
+
+uniform vec4 color;
 void main() {
     gl_FragColor = color;
 }`;
