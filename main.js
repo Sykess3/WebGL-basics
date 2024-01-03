@@ -98,8 +98,10 @@ function Model(name) {
     this.name = name;
     this.iVertexBuffer = gl.createBuffer();
     this.iNormalBuffer = gl.createBuffer();
+    this.iTextureBuffer = gl.createBuffer();
 
     this.count = 0;
+    this.countTexture = 0;
 
     this.BufferData = function (vertices, normals) {
 
@@ -110,6 +112,14 @@ function Model(name) {
         gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(normals), gl.STREAM_DRAW);
 
         this.count = vertices.length / 3;
+    }
+
+    this.TextureBufferData = function (textureCoords) {
+
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.iTextureBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(textureCoords), gl.STREAM_DRAW);
+
+        this.countTexture = textureCoords.length / 2;
     }
 
     this.Draw = function (projectionViewMatrix) {
@@ -150,6 +160,13 @@ function Model(name) {
         gl.vertexAttribPointer(shProgram.iNormalVertex, 3, gl.FLOAT, false, 0, 0);
         gl.enableVertexAttribArray(shProgram.iNormalVertex);
 
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.iTextureBuffer);
+        gl.vertexAttribPointer(shProgram.iTextureCoords2D, 2, gl.FLOAT, false, 0, 0);
+        gl.enableVertexAttribArray(shProgram.iTextureCoords2D);
+
+        gl.uniform1i(shProgram.iTexture, 0);
+        gl.enable(gl.TEXTURE_2D);
+
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, this.count);
     }
 }
@@ -164,6 +181,8 @@ function ShaderProgram(name, program) {
     this.iSolidColor = -1;
     this.iAttribVertex = -1;
     this.iNormalVertex = -1;
+    this.iTextureCoords2D = -1;
+    this.iTexture = -1;
 
     this.iModelViewProjectionMatrix = -1;
     this.iWorldInverseTranspose = -1;
@@ -227,6 +246,7 @@ function GetDirLightDirection(){
 function CreateSurfaceData() {
     let vertexList = [];
     let normalsList = [];
+    let textureList = [];
 
     let phiMax = Math.PI * 2;
     let phiMin = 0;
@@ -246,6 +266,24 @@ function CreateSurfaceData() {
             let cvert = CalculateCorrugatedSpherePoint(phi + phiStep, v + vStep)
             let n4 = CalcAnalyticNormal(phi + phiStep, v + vStep, cvert)
 
+            let u1 = map(phi, 0, phiMax, 0, 1)
+            let v1 = map(v, 0, vMax, 0, 1)
+            textureList.push(u1, v1)
+            u1 = map(phi + phiStep, 0, phiMax, 0, 1)
+            textureList.push(u1, v1)
+            u1 = map(phi, 0, phiMax, 0, 1)
+            v1 = map(v + vStep, 0, vMax, 0, 1)
+            textureList.push(u1, v1)
+            u1 = map(phi + phiStep, 0, phiMax, 0, 1)
+            v1 = map(v, 0, vMax, 0, 1)
+            textureList.push(u1, v1)
+            v1 = map(v + vStep, 0, vMax, 0, 1)
+            textureList.push(u1, v1)
+            u1 = map(phi, 0, phiMax, 0, 1)
+            v1 = map(v + vStep, 0, vMax, 0, 1)
+            textureList.push(u1, v1)
+            
+
             vertexList.push(vert.x, vert.y, vert.z)
             normalsList.push(n1.x, n1.y, n1.z)
             vertexList.push(avert.x, avert.y, avert.z)
@@ -262,7 +300,13 @@ function CreateSurfaceData() {
         }
     }
 
-    return [vertexList, normalsList];
+    return [vertexList, normalsList, textureList];
+}
+
+function map(val, f1, t1, f2, t2) {
+    let m;
+    m = (val - f1) * (t2 - f2) / (t1 - f1) + f2
+    return Math.min(Math.max(m, f2), t2);
 }
 
 function CalcAnalyticNormal(u, v, xyz)
@@ -327,14 +371,8 @@ function CalculateCorrugatedSpherePoint(phi, v) {
 /* Initialize the WebGL context. Called from init() */
 function initGL() {
 
-    SetupSurface();
-    BuildSurface();
 
-    SetupLine();
-    BuildLine();
-
-    SetupSegment();
-    BuildSegment();
+    LoadTexture();
 
     gl.enable(gl.DEPTH_TEST);
     gl.enable(gl.CULL_FACE);
@@ -377,6 +415,7 @@ function BuildSurface(){
     surface = new Model('Surface');
     let data = CreateSurfaceData();
     surface.BufferData(data[0], data[1]);
+    surface.TextureBufferData(data[2]);
 }
 
 function SetupSurface(){
@@ -387,6 +426,8 @@ function SetupSurface(){
     shProgram.Use();
 
     shProgram.iAttribVertex = gl.getAttribLocation(prog, "vertex");
+    shProgram.iTextureCoords2D = gl.getAttribLocation(prog, "textureCoord");
+
     shProgram.iNormalVertex = gl.getAttribLocation(prog, "normal");
 
     shProgram.iWorldInverseTranspose = gl.getUniformLocation(prog, "WorldInverseTranspose");
@@ -402,7 +443,9 @@ function SetupSurface(){
     shProgram.iLSSpecularColor = gl.getUniformLocation(prog, "lsSpecularColor");
 
     shProgram.iLightDirection = gl.getUniformLocation(prog, "LightDirection");
-    shProgram.iCamWorldPosition = gl.getUniformLocation(prog, "CamWorldPosition");
+    shProgram.iCamWorldPosition = gl.getUniformLocation(prog, "CamWorldPosition"); 
+
+    shProgram.iTexture = gl.getUniformLocation(prog, "texture"); 
 }
 
 
@@ -477,7 +520,7 @@ function init() {
         return false;
     };
 
-    draw();
+    //draw();
 }
 
 window.addEventListener("keydown", function (event) {
@@ -527,3 +570,41 @@ window.addEventListener("keydown", function (event) {
 
     }
 });
+
+
+let isLoadedTexture = false;
+
+function LoadTexture() {
+    let texture = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+
+    const image = new Image();
+    image.crossOrigin = 'anonymus';
+
+    image.src = "https://raw.githubusercontent.com/Sykess3/WebGL-basics/CGW/texture.jpg";
+    image.onload = () => {
+        gl.bindTexture(gl.TEXTURE_2D, texture);
+        gl.texImage2D(
+            gl.TEXTURE_2D,
+            0,
+            gl.RGBA,
+            gl.RGBA,
+            gl.UNSIGNED_BYTE,
+            image
+        );
+
+        SetupSurface();
+        BuildSurface();
+    
+        SetupLine();
+        BuildLine();
+    
+        SetupSegment();
+        BuildSegment();
+
+
+        draw()
+    }
+}
