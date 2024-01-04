@@ -12,7 +12,7 @@ let segmentProgram;
 let ModelRadius = 1;
 let scale = 1.0;
 let AmbientColor = [0.1, 0.1, 0.1];
-let DiffuseColor = [0.7, 0.1, 0.1];
+let DiffuseColor = [1.0, 1.0, 1.0];
 let SpecularColor = [0.97, 0.97, 0.97];
 let Shininess = 12;
 let LightIntensity = 1;
@@ -20,6 +20,7 @@ let World_X = 0;
 let World_Y = 0;
 let World_Z = 0;
 let CameraPosition = [0, 0, -10]
+let texturePoint = [0, 0]
 
 let WorldOrigin = [0, 0, 0]
 
@@ -32,6 +33,7 @@ let currentAnimationTime = 0;
 let animationSpeed = 0;
 let AnimationVelocity = [1, 1, 0];
 let ShowPath = false;
+let rotateValue;
 
 function SwitchAnimation(){
 
@@ -151,6 +153,12 @@ function Model(name) {
     
         gl.uniform3fv(shProgram.iCamWorldPosition, CameraPosition);
         gl.uniform3fv(shProgram.iLightDirection, GetDirLightDirection());
+
+        gl.uniform2fv(shProgram.iRotationPoint, texturePoint);
+
+        let point = CalculateCorrugatedSpherePoint(map(texturePoint[0], 0, 1,phiMin, phiMax), map(texturePoint[1], 0, 1,vMin, vMax));
+        gl.uniform3fv(shProgram.iPointVizualizationPosition, [point.x, point.y, point.z]);
+        gl.uniform1f(shProgram.iRotationValue, rotateValue);
         
         gl.bindBuffer(gl.ARRAY_BUFFER, this.iVertexBuffer);
         gl.vertexAttribPointer(shProgram.iAttribVertex, 3, gl.FLOAT, false, 0, 0);
@@ -163,7 +171,6 @@ function Model(name) {
         gl.bindBuffer(gl.ARRAY_BUFFER, this.iTextureBuffer);
         gl.vertexAttribPointer(shProgram.iTextureCoords2D, 2, gl.FLOAT, false, 0, 0);
         gl.enableVertexAttribArray(shProgram.iTextureCoords2D);
-
         gl.uniform1i(shProgram.iTexture, 0);
         gl.enable(gl.TEXTURE_2D);
 
@@ -199,6 +206,10 @@ function ShaderProgram(name, program) {
     this.iLightDirection = -1;
     this.iCamWorldPosition = -1;
 
+    this.iPointVizualizationPosition = -1;
+    this.iRotationPoint = -1;
+    this.iRotationValue = -1;
+
     this.Use = function () {
         gl.useProgram(this.prog);
     }
@@ -225,8 +236,8 @@ function draw() {
     const camRotation = m4.axisRotation([0, 1, 0], 179);
     const projectionViewMatrix = m4.multiply(projectionMatrix, m4.multiply(viewMatrix, camRotation));
 
-    lineProgram.Use();
-    line.Draw(projectionViewMatrix);
+    //lineProgram.Use();
+    //line.Draw(projectionViewMatrix);
 
     if(ShowPath){
         segmentProgram.Use();
@@ -243,17 +254,18 @@ function GetDirLightDirection(){
 }
 
 
+let phiMax = Math.PI * 2;
+let phiMin = 0;
+let vMax = Math.PI * 0.5;
+let vMin = 0;
+
 function CreateSurfaceData() {
     let vertexList = [];
     let normalsList = [];
     let textureList = [];
 
-    let phiMax = Math.PI * 2;
-    let phiMin = 0;
-    let vMax = Math.PI * 0.5;
-    let vMin = 0;
-    let phiStep = phiMax / 50;
-    let vStep = vMax / 50;
+    let phiStep = phiMax / 100;
+    let vStep = vMax / 100;
 
     for (let phi = phiMin; phi < phiMax + phiStep; phi += phiStep) {
         for (let v = vMin; v < vMax + vStep; v += vStep) {
@@ -446,6 +458,9 @@ function SetupSurface(){
     shProgram.iCamWorldPosition = gl.getUniformLocation(prog, "CamWorldPosition"); 
 
     shProgram.iTexture = gl.getUniformLocation(prog, "texture"); 
+    shProgram.iRotationPoint = gl.getUniformLocation(prog, "rotationPoint");
+    shProgram.iRotationValue = gl.getUniformLocation(prog, "rotationValue");
+    shProgram.iPointVizualizationPosition = gl.getUniformLocation(prog, "pointVizualizationPosition");
 }
 
 
@@ -523,53 +538,32 @@ function init() {
     //draw();
 }
 
-window.addEventListener("keydown", function (event) {
-    switch (event.key) {
-        case "ArrowLeft":
-        case "a":
-        case "A":
-            World_X -= 0.1;
-            draw();
-            break;
-        case "ArrowRight":
-        case "d":
-        case "D":
-            World_X += 0.1;
-            draw();
-            break;
-        case "ArrowDown":
-        case "s":
-        case "S":
-            World_Y -= 0.1;
-            draw();
-            break;
-        case "ArrowUp":
-        case "w":
-        case "W":
-            World_Y += 0.1;
-            draw();
-            break;
-        case "+":
-            if (Shininess < 10) {
-                Shininess += 1;
-            }
-            draw();
-            document.getElementById("Shininess").value = Shininess;
-            document.getElementById("Shininess_text").innerHTML = Shininess;
-            break;
-        case "-":
-            if (Shininess > -10) {
-                Shininess -= 1;
-            }
-            draw();
-            document.getElementById("Shininess").value = Shininess;
-            document.getElementById("Shininess_text").innerHTML = Shininess;
-            break;
-        default:
-            return;
 
+window.onkeydown = (e) => {
+    switch (e.keyCode) {
+        case 65:
+            texturePoint[0] += 0.01;
+            break;
+        case 68:
+            texturePoint[0] -= 0.01;
+            break;
+        case 87:
+            texturePoint[1] += 0.01;
+            break;
+        case 83:
+            texturePoint[1] -= 0.01;
+            break;
     }
-});
+    texturePoint[1] = Math.max(0.001, Math.min(texturePoint[1], 0.999))
+
+    if(texturePoint[0] >= 1){
+        texturePoint[0] = 0.001;
+    }
+    else if(texturePoint[0] <= 0){
+        texturePoint[0] = 0.99;
+    }
+    draw();
+}
 
 
 let isLoadedTexture = false;
@@ -608,3 +602,8 @@ function LoadTexture() {
         draw()
     }
 }
+
+onmousemove = (e) => {
+    rotateValue = map(e.clientX, 0, window.outerWidth, 0, Math.PI)
+    draw()
+};

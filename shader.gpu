@@ -19,10 +19,17 @@ uniform vec3 lsSpecularColor;
 uniform vec3 LightDirection;
 uniform vec3 CamWorldPosition;
 
+uniform vec2 rotationPoint;
+uniform float rotationValue;
+uniform vec3 pointVizualizationPosition;
+
 varying vec4 color;
 varying vec2 v_texcoord;
+varying vec4 pointColorSaturation;
+
 
 void main() {
+
     vec3 normalInterp = (WorldInverseTranspose * vec4(normalize(normal), 0.0)).xyz;
     vec3 N = normalize(normalInterp);
     vec3 L = normalize(LightDirection);
@@ -31,13 +38,18 @@ void main() {
     vec3 reflectLighDir = normalize(reflect(-L, N)); 
     vec3 camViewDir = normalize(CamWorldPosition - vertex);
 
+    pointColorSaturation = vec4(0.0, 0.0, 0.0, 0.0);
+    if(distance(pointVizualizationPosition, vertex) < 0.07){
+        pointColorSaturation.r = 1.0;
+        pointColorSaturation.g = -1.0;
+        pointColorSaturation.b = -1.0;
+    }
     vec3 ambient = matAmbientColor * lsAmbientColor;
     vec3 diffuse = matDiffuseColor * lsDiffuseColor * max(0.0, dot(N, L));
     vec3 specular = matSpecularColor * lsSpecularColor * pow(max(0.0, dot(camViewDir, reflectLighDir)), matShininess);
 
     color = vec4(ambient + diffuse + specular, 1.0);
-    vec2 test = textureCoord;
-    v_texcoord = vec2(textureCoord);
+    v_texcoord = textureCoord;
 }`;
 
 
@@ -50,11 +62,41 @@ const fragmentShaderSource = `
 #endif
 
 varying vec4 color;
+varying vec4 pointColorSaturation;
+uniform vec2 rotationPoint;
+uniform float rotationValue;
 uniform sampler2D texture;
 varying vec2 v_texcoord;
+
+mat3 getRotationMatrix(float angle) {
+    float s = sin(angle);
+    float c = cos(angle);
+    return mat3(
+        vec3(c, -s, 0.0),
+        vec3(s, c, 0.0),
+        vec3(0.0, 0.0, 1.0)
+    );
+}
+
 void main() {
-    gl_FragColor = texture2D(texture, v_texcoord);
-    //gl_FragColor = vec4(1,1,1,1);
+    vec3 texCoordHomogeneous = vec3(v_texcoord, 1.0);
+
+    mat3 t1Matrix = mat3(
+        vec3(1.0, 0.0, -rotationPoint.x),
+        vec3(0.0, 1.0, -rotationPoint.y),
+        vec3(0.0, 0.0, 1.0)
+    );
+
+    mat3 rotationMatrix = getRotationMatrix(rotationValue);
+    vec3 rotatedTexCoord = texCoordHomogeneous * t1Matrix * rotationMatrix;
+
+    mat3 t2Matrix = mat3(
+        vec3(1.0, 0.0, rotationPoint.x),
+        vec3(0.0, 1.0, rotationPoint.y),
+        vec3(0.0, 0.0, 1.0)
+    );
+
+    gl_FragColor = texture2D(texture, (rotatedTexCoord * t2Matrix).xy) * color + pointColorSaturation;
 }`;
 
 
