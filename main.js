@@ -33,7 +33,7 @@ let currentAnimationTime = 0;
 let animationSpeed = 0;
 let AnimationVelocity = [1, 1, 0];
 let ShowPath = false;
-let rotateValue;
+let rotateValue = 0;
 
 function SwitchAnimation(){
 
@@ -603,7 +603,3 @@ function LoadTexture() {
     }
 }
 
-onmousemove = (e) => {
-    rotateValue = map(e.clientX, 0, window.outerWidth, 0, Math.PI)
-    draw()
-};
