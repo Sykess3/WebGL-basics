@@ -23,6 +23,8 @@ uniform vec2 rotationPoint;
 uniform float rotationValue;
 uniform vec3 pointVizualizationPosition;
 
+uniform mat4 StereoMatrix;
+
 varying vec4 color;
 varying vec2 v_texcoord;
 varying vec4 pointColorSaturation;
@@ -33,7 +35,8 @@ void main() {
     vec3 normalInterp = (WorldInverseTranspose * vec4(normalize(normal), 0.0)).xyz;
     vec3 N = normalize(normalInterp);
     vec3 L = normalize(LightDirection);
-    gl_Position = ModelViewProjectionMatrix * vec4(vertex,1.0);
+    vec4 vertPos4 = ModelViewProjectionMatrix * vec4(vertex,1.0);
+    gl_Position = StereoMatrix * vertPos4;
 
     vec3 reflectLighDir = normalize(reflect(-L, N)); 
     vec3 camViewDir = normalize(CamWorldPosition - vertex);
@@ -97,6 +100,7 @@ void main() {
     );
 
     gl_FragColor = texture2D(texture, (rotatedTexCoord * t2Matrix).xy) * color + pointColorSaturation;
+    //gl_FragColor = vec4(1, 1, 1, 1);
 }`;
 
 

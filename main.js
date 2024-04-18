@@ -18,12 +18,12 @@ let Shininess = 12;
 let LightIntensity = 1;
 let World_X = 0;
 let World_Y = 0;
-let World_Z = 0;
-let CameraPosition = [0, 0, -10]
+let World_Z = -10;
+let CameraPosition = [0, 0, -1]
 let texturePoint = [0, 0]
 
 let WorldOrigin = [0, 0, 0]
-
+ 
 let LightPosition = [0, 0, 5]
 
 let isAnimating = false;
@@ -34,6 +34,8 @@ let animationSpeed = 0;
 let AnimationVelocity = [1, 1, 0];
 let ShowPath = false;
 let rotateValue = 0;
+
+let camera
 
 function SwitchAnimation(){
 
@@ -124,7 +126,7 @@ function Model(name) {
         this.countTexture = textureCoords.length / 2;
     }
 
-    this.Draw = function (projectionViewMatrix) {
+    this.Draw = function (projectionViewMatrix, ProjectionMatrix, ModelViewMatrix) {
 
             /*  the view matrix from the SimpleRotator object.*/
         let rotation = spaceball.getViewMatrix();
@@ -136,6 +138,10 @@ function Model(name) {
         /* Multiply the projection matrix times the modelview matrix to give the
            combined transformation matrix, and send that to the shader program. */
         let modelViewProjection = m4.multiply(projectionViewMatrix, modelMatrix);
+        modelViewProjection = m4.multiply(modelViewProjection, ModelViewMatrix);
+
+        let test = m4.multiply(ProjectionMatrix, translation);
+        gl.uniformMatrix4fv(shProgram.iStereoMatrix, false, test);
 
         var worldInverseMatrix = m4.inverse(modelMatrix);
         var worldInverseTransposeMatrix = m4.transpose(worldInverseMatrix);
@@ -210,6 +216,8 @@ function ShaderProgram(name, program) {
     this.iRotationPoint = -1;
     this.iRotationValue = -1;
 
+    this.iStereoMatrix;
+
     this.Use = function () {
         gl.useProgram(this.prog);
     }
@@ -231,7 +239,7 @@ function draw() {
 
 
     /* Set the values of the projection transformation */
-    let projectionMatrix = m4.perspective(scale, 2, 1, 40);
+    let projectionMatrix = m4.perspective(Math.PI / 8, 2, 1, 40);
     const viewMatrix = m4.lookAt(CameraPosition, WorldOrigin, [0, 1, 0]);
     const camRotation = m4.axisRotation([0, 1, 0], 179);
     const projectionViewMatrix = m4.multiply(projectionMatrix, m4.multiply(viewMatrix, camRotation));
@@ -245,7 +253,19 @@ function draw() {
     }
     
     shProgram.Use()
-    surface.Draw(projectionViewMatrix);
+    ReadInput();
+
+    gl.colorMask(false, true, true, false);
+    camera.ApplyRightFrustum();
+    surface.Draw(projectionViewMatrix, camera.mRightProjectionMatrix, camera.mRightModelViewMatrix);
+
+    gl.clear(gl.DEPTH_BUFFER_BIT);
+
+    camera.ApplyLeftFrustum();
+    gl.colorMask(true, false, false, false);
+    surface.Draw(projectionViewMatrix, camera.mLeftProjectionMatrix, camera.mLeftModelViewMatrix);
+
+    gl.colorMask(true, true, true, true);
 }
 
 function GetDirLightDirection(){
@@ -461,6 +481,8 @@ function SetupSurface(){
     shProgram.iRotationPoint = gl.getUniformLocation(prog, "rotationPoint");
     shProgram.iRotationValue = gl.getUniformLocation(prog, "rotationValue");
     shProgram.iPointVizualizationPosition = gl.getUniformLocation(prog, "pointVizualizationPosition");
+
+    shProgram.iStereoMatrix = gl.getUniformLocation(prog, "StereoMatrix");
 }
 
 
@@ -500,6 +522,7 @@ function createProgram(gl, vShader, fShader) {
  * initialization function that will be called when the page has loaded
  */
 function init() {
+    camera = new StereoCamera(50, 0.2, 1, Math.PI / 8, 2, 50)
     let canvas;
     try {
         canvas = document.getElementById("webglcanvas");
@@ -529,8 +552,6 @@ function init() {
             return false;
         }
         scale -= ((event.wheelDelta / 150) / 10.0);
-        document.getElementById("scale").value = +scale.toFixed(1);
-        document.getElementById("scale_text").innerHTML = +scale.toFixed(1);
         draw();
         return false;
     };
@@ -601,5 +622,101 @@ function LoadTexture() {
 
         draw()
     }
+}
+
+function StereoCamera(
+    Convergence,
+    EyeSeparation,
+    AspectRatio,
+    FOV,
+    NearClippingDistance,
+    FarClippingDistance
+) {
+    this.mConvergence = Convergence;
+    this.mEyeSeparation = EyeSeparation;
+    this.mAspectRatio = AspectRatio;
+    this.mFOV = FOV;
+    this.mNearClippingDistance = NearClippingDistance;
+    this.mFarClippingDistance = FarClippingDistance;
+
+    this.mLeftProjectionMatrix = null;
+    this.mRightProjectionMatrix = null;
+
+    this.mLeftModelViewMatrix = null;
+    this.mRightModelViewMatrix = null;
+
+    this.ApplyLeftFrustum = function () {
+        let top, bottom, left, right;
+        top = this.mNearClippingDistance * Math.tan(this.mFOV / 2);
+        bottom = -top;
+
+        let a = this.mAspectRatio * Math.tan(this.mFOV / 2) * this.mConvergence;
+        let b = a - this.mEyeSeparation / 2;
+        let c = a + this.mEyeSeparation / 2;
+
+        left = (-b * this.mNearClippingDistance) / this.mConvergence;
+        right = (c * this.mNearClippingDistance) / this.mConvergence;
+
+        // Set the Projection Matrix
+        this.mLeftProjectionMatrix = m4.frustum(
+            left,
+            right,
+            bottom,
+            top,
+            this.mNearClippingDistance,
+            this.mFarClippingDistance
+        );
+
+        // Displace the world to right
+        this.mLeftModelViewMatrix = m4.translation(
+            this.mEyeSeparation / 2,
+            0.0,
+            0.0
+        );
+    };
+
+    this.ApplyRightFrustum = function () {
+        let top, bottom, left, right;
+        top = this.mNearClippingDistance * Math.tan(this.mFOV / 2);
+        bottom = -top;
+
+        let a = this.mAspectRatio * Math.tan(this.mFOV / 2) * this.mConvergence;
+        let b = a - this.mEyeSeparation / 2;
+        let c = a + this.mEyeSeparation / 2;
+
+        left = (-c * this.mNearClippingDistance) / this.mConvergence;
+        right = (b * this.mNearClippingDistance) / this.mConvergence;
+
+        // Set the Projection Matrix
+        this.mRightProjectionMatrix = m4.frustum(
+            left,
+            right,
+            bottom,
+            top,
+            this.mNearClippingDistance,
+            this.mFarClippingDistance
+        );
+
+        // Displace the world to left
+        this.mRightModelViewMatrix = m4.translation(
+            -this.mEyeSeparation / 2,
+            0.0,
+            0.0
+        );
+    };
+}
+
+function ReadInput() {
+    let eyeSeparation = document.getElementById("eyeSeparation").value;
+    camera.mEyeSeparation = eyeSeparation;
+
+    let fieldOfView = document.getElementById("fieldOfView").value;
+    camera.mFOV = fieldOfView;
+
+    let nearClippingDistance = document.getElementById("nearClippingDistance").value;
+    camera.mNearClippingDistance = parseFloat(nearClippingDistance);
+
+    let convergence = document.getElementById("convergenceDistance").value;
+    camera.mConvergence = convergence;
 }
 

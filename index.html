@@ -5,7 +5,7 @@
     <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 
-    <title>PA#2</title>
+    <title>PA#1</title>
 
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-EVSTQN3/azprG1Anm3QDgpJLIm9Nao0Yz1ztcQTwFspd3yD65VohhpuuCOmLASjC" crossorigin="anonymous">
 
@@ -20,159 +20,53 @@
 <body onload="init()">
 
     <h2 class="m-3" style="text-align: center;">PA3</h2>
-
-
     <div class="container mt-5">
         <div class="col align-items-center">
-            <div class="row" style="display: flex; width: 100%;">
-                <span class="input-group-text mb-2" style="flex: 1;">Directional Light</span>
-                <span class="input-group-text mb-2" style="flex: 1;">Gouraud Shading</span>
-                <span class="input-group-text mb-2" style="flex: 1;">Perspective Projection</span>
-                <span class="input-group-text mb-2" style="flex: 1;">Normal Analytics</span>
-            </div>
-            
-            <div class="col mb-4 text-center">
-                <span class="input-group-text mb-2 " style="background-color: teal"> Use arrows or WASD for moving model</span>
-            </div>
+        
             <div class="col mb-4 text-center">
                 <div id="canvas-holder">
                     <canvas class="rounded-1" width="1200" height="600" id="webglcanvas" style="background-color: teal"></canvas>
                 </div>
             </div>
-            <div class="col">
-                <button onclick="SwitchAnimation()">Start/Stop Animation</button>
-                <div class="form-check ms-1 mb-5">
-                    <input class="form-check-input" type="checkbox" value="" id="showPath" onclick="SwitchShowPath();">
-                    <label class="form-check-label" for="showPath">
-                        Show Path
-                    </label>
-                </div>
 
-                <div class="me-5">
-                    <label for="x_velocity" class="form-label">X Velocity</label>
-                        <span class="badge bg-primary" id="xvelocity_text">0</span>
-                    <input type="range" class="form-range" min="-1" max="1" step="0.1" id="x_velocity" value="0">
+            
+    <h3>Eye separation</h3>
+    <input type="range" id="eyeSeparation" value="0.2" min="0.0" max="1" step="0.1">
 
-                    <div class="me-5">
-                        <label for="tRotation" class="form-label">Texure Rotation</label>
-                            <span class="badge bg-primary" id="tRotation_text">0</span>
-                        <input type="range" class="form-range" min="0" max="180" step="1" id="tRotation" value="0">
+    <h3>Field of View</h3>
+    <input type="range" id="fieldOfView" value="0.4" min="0" max="1.2" step="0.1">
 
-                <div class="me-5">
-                    <label for="y_velocity" class="form-label">Y Velocity</label>
-                        <span class="badge bg-primary" id="yvelocity_text">1</span>
-                    <input type="range" class="form-range" min="-1" max="1" step="0.1" id="y_velocity" value="1">
-                
-                <div class="me-5">
-                    <label for="radius" class="form-label">Radius</label>
-                        <span class="badge bg-primary" id="radius_text">1</span>
-                    <input type="range" class="form-range" min="0" max="5" step="0.1" id="radius" value="1">
+    <h3>Near Clipping distance</h3>
+    <input type="range" id="nearClippingDistance" value="2" min="2" max="12" step="0.1">
 
-                    <div class="input-group mb-3">
-                        <span class="input-group-text">Ambient Color</span>
-                        <input id="AmbientColor" type="color" class="form-control h-auto d-inline-block" aria-describedby="AmbientColor" value="#191919">
-                    </div>
-                    <div class="input-group mb-3">
-                        <span class="input-group-text">Diffuse Color</span>
-                        <input id="DiffuseColor" type="color" class="form-control h-auto d-inline-block" aria-describedby="DiffuseColor" value="#B21919">
-                    </div>
-                    <div class="input-group mb-3">
-                        <span class="input-group-text">Specular Color</span>
-                        <input id="SpecularColor" type="color" class="form-control h-auto d-inline-block" aria-describedby="SpecularColor" value="#DCDCDC">
-                    </div>
-                    <label for="Shininess" class="form-label">Shininess (or press +/-)</label>
-                    <span class="badge bg-primary" id="Shininess_text">12</span>
-                    <input type="range" class="form-range" min="12" max="32" step="1" id="Shininess" value="1">
-                    <label for="scale" class="form-label">Zoom (or turn the mouse wheel)</label>
-                    <span class="badge bg-primary" id="scale_text">1</span>
-                    <input type="range" class="form-range" min="0" max="2" step="0.125" id="scale" value="1">
-
-                    <label for="LightIntensity" class="form-label">Light Intensity</label>
-                    <span class="badge bg-primary" id="LightIntensity_text">1</span>
-                    <input type="range" class="form-range" min="0" max="5" step="0.1" id="LightIntensity" value="1">
-                </div>
-            </div>
-        </div>
-    </div>
+    <h3>Convergence distance</h3>
+    <input type="range" id ="convergenceDistance" value="10" min="10" max="50" step="1">
 
 </body>
 
+
 <script>
-    var input_a = document.getElementById("AmbientColor");
-    var input_ts = document.getElementById("tRotation");
-    var input_d = document.getElementById("DiffuseColor");
-    var input_s = document.getElementById("SpecularColor");
-    var input_li = document.getElementById("LightIntensity");
-    var input_sh = document.getElementById("Shininess");
-    var input_sc = document.getElementById("scale");
-    var input_r = document.getElementById("radius");
-    var input_xv = document.getElementById("x_velocity");
-    var input_yv = document.getElementById("y_velocity");
 
-
+    var input_a = document.getElementById("eyeSeparation");
+    var input_ts = document.getElementById("fieldOfView");
+    var input_d = document.getElementById("nearClippingDistance");
+    var input_s = document.getElementById("convergenceDistance");
 
     input_a.addEventListener("input", function() {
-        AmbientColor = [hexToRgb(this.value).r / 255, hexToRgb(this.value).g / 255, hexToRgb(this.value).b / 255];
-        draw();
-    }, false);
-    
-
-    input_d.addEventListener("input", function() {
-        DiffuseColor = [hexToRgb(this.value).r / 255, hexToRgb(this.value).g / 255, hexToRgb(this.value).b / 255];
-        draw();
-    }, false);
-
-    input_s.addEventListener("input", function() {
-        SpecularColor = [hexToRgb(this.value).r / 255, hexToRgb(this.value).g / 255, hexToRgb(this.value).b / 255];
-        draw();
-    }, false);
-
-    input_sh.addEventListener("input", function() {
-        Shininess = this.value;
-        document.getElementById("Shininess_text").innerHTML = Shininess;
-        draw();
-    }, false);
-
-    input_li.addEventListener("input", function() {
-        LightIntensity = this.value;
-        document.getElementById("LightIntensity_text").innerHTML = LightIntensity;
         draw();
     }, false);
 
     input_ts.addEventListener("input", function() {
-        rotateValue = this.value;
-        document.getElementById("tRotation_text").innerHTML = this.value;
         draw();
     }, false);
 
-    input_xv.addEventListener("input", function() {
-        AnimationVelocity[0] = this.value;
-        document.getElementById("xvelocity_text").innerHTML = AnimationVelocity[0];
-        BuildSegment();
+    input_d.addEventListener("input", function() {
         draw();
     }, false);
 
-    input_yv.addEventListener("input", function() {
-        AnimationVelocity[1] = this.value;
-        document.getElementById("yvelocity_text").innerHTML = AnimationVelocity[1];
-        BuildSegment();
+    input_s.addEventListener("input", function() {
         draw();
     }, false);
-
-    input_sc.addEventListener("input", function() {
-        scale = this.value;
-        document.getElementById("scale_text").innerHTML = scale;
-        draw();
-    }, false);
-
-    input_r.addEventListener("input", function() {
-        ModelRadius = this.value;
-        document.getElementById("radius_text").innerHTML = ModelRadius;
-        BuildSurface();
-        BuildSegment();
-        draw();
-    }, false);
-
 
     function hexToRgb(hex) {
         var result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
