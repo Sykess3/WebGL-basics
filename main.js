@@ -255,14 +255,14 @@ function draw() {
     shProgram.Use()
     ReadInput();
 
-    gl.colorMask(false, true, true, false);
+    gl.colorMask(true, false, false, false);
     camera.ApplyRightFrustum();
     surface.Draw(projectionViewMatrix, camera.mRightProjectionMatrix, camera.mRightModelViewMatrix);
 
     gl.clear(gl.DEPTH_BUFFER_BIT);
 
     camera.ApplyLeftFrustum();
-    gl.colorMask(true, false, false, false);
+    gl.colorMask(false, true, true, false);
     surface.Draw(projectionViewMatrix, camera.mLeftProjectionMatrix, camera.mLeftModelViewMatrix);
 
     gl.colorMask(true, true, true, true);
