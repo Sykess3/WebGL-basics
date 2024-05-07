@@ -1,7 +1,6 @@
 # <h1> WebGL </h1>
 <h2> Bulyha Mykola </h2>
-<h3>Practical assignment #3 </h3>
-<h4>"Corrugated Sphere"</h4>
+<h3>Practical assignment #2 </h3>
 
 
-![Animation](https://github.com/Sykess3/WebGL-basics/assets/62252443/43bb30b4-d6e1-45b2-b323-270041c9d2e5)
+![Screenshot 2024-05-07 165806](https://github.com/Sykess3/WebGL-basics/assets/62252443/56e60fce-55db-44ac-85a7-f5a86226e11a)
