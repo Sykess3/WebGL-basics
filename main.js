@@ -8,6 +8,8 @@ let lineProgram;
 let line;
 let segment;
 let segmentProgram;
+let image;
+let textureModel;
 
 let ModelRadius = 1;
 let scale = 1.0;
@@ -34,8 +36,9 @@ let animationSpeed = 0;
 let AnimationVelocity = [1, 1, 0];
 let ShowPath = false;
 let rotateValue = 0;
-
-let camera
+let plane; 
+let camera;
+let textureVID, video, track;
 
 function SwitchAnimation(){
 
@@ -97,6 +100,99 @@ function Line(name, program){
         gl.drawArrays(gl.LINE_STRIP, 0, 2);
     }
 }
+
+function Plane(program){
+
+    this.iVertexBuffer = gl.createBuffer();
+    this.iTextureBuffer = gl.createBuffer();
+    this.countText = 0;
+    this.count = 0;
+    this.shProgram = program;
+
+    this.shProgram.iAttribVertex = gl.getAttribLocation(this.shProgram.prog, "vertex");
+    this.shProgram.iAttribTexture = gl.getAttribLocation(this.shProgram.prog, "texture");
+    this.shProgram.iModelViewMatrix = gl.getUniformLocation(this.shProgram.prog, "ModelViewMatrix"); 
+    this.shProgram.iProjectionMatrix = gl.getUniformLocation(this.shProgram.prog, "ProjectionMatrix");
+
+    this.BufferData = function (vertices) {
+        this.shProgram.Use();
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.iVertexBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STREAM_DRAW);
+
+        this.count = vertices.length / 3;
+    }
+
+    this.TextureBufferData = function (points) {
+        this.shProgram.Use();
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.iTextureBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(points), gl.STREAM_DRAW);
+
+        this.countText = points.length / 2;
+    }
+    // Draw the surface
+    this.Draw = function (modelViewProjection) {
+
+        let rotation = m4.xRotate(m4.identity(),  3.14);
+    
+        let translation = m4.translation(-4, 2, -10);
+    
+        let modelMatrix = m4.multiply(translation, rotation);
+        this.shProgram.Use();
+        gl.bindTexture(gl.TEXTURE_2D, textureVID);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, video);
+        gl.uniformMatrix4fv(this.shProgram.iModelViewMatrix, false, modelMatrix);
+        gl.uniformMatrix4fv(this.shProgram.iProjectionMatrix, false, modelViewProjection);
+
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.iVertexBuffer);
+        gl.vertexAttribPointer(this.shProgram.iAttribVertex, 3, gl.FLOAT, false, 0, 0);
+        gl.enableVertexAttribArray(this.shProgram.iAttribVertex);
+
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.iTextureBuffer);
+        gl.vertexAttribPointer(this.shProgram.iAttribTexture, 2, gl.FLOAT, false, 0, 0);
+        gl.enableVertexAttribArray(this.shProgram.iAttribTexture);
+
+
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, this.count);
+    }
+}
+
+/* Initialize the WebGL context. Called from init() */
+function initGL() {
+
+    video = document.createElement('video');
+    video.setAttribute('autoplay', true);
+    window.vid = video;
+    getWebcam();
+    CreateWebCamTexture();
+
+    let prog = createProgram(gl, vertexShaderPlane, fragmentShaderPlane);
+    let test = new ShaderProgram('Segment', prog);
+    plane = new Plane(test);
+    test.Use();
+    let planeSize = 4;
+    plane.BufferData([
+        0.0, 0.0, 0.0, 
+        planeSize * 2 , planeSize, 0.0,
+        planeSize * 2, 0.0, 0.0, 
+        0.0, 0.0, 0.0, 
+        planeSize * 2, planeSize, 0.0,
+        0.0, planeSize, 0.0
+    ]);
+    plane.TextureBufferData([
+        0.0, 0.0, // Bottom-left
+        1.0, 1.0, // Top-right
+        1.0, 0.0, // Bottom-right
+        0.0, 0.0, // Bottom-left (repeat to close the quad)
+        1.0, 1.0, // Top-right (repeat)
+        0.0, 1.0  // Top-left
+    ]);
+
+    LoadTexture();
+
+    gl.enable(gl.DEPTH_TEST);
+    gl.enable(gl.CULL_FACE);
+}
+
 // Constructor
 function Model(name) {
     this.name = name;
@@ -128,6 +224,16 @@ function Model(name) {
 
     this.Draw = function (projectionViewMatrix, ProjectionMatrix, ModelViewMatrix) {
 
+        gl.bindTexture(gl.TEXTURE_2D, textureModel);
+        gl.texImage2D(
+            gl.TEXTURE_2D,
+            0,
+            gl.RGBA,
+            gl.RGBA,
+            gl.UNSIGNED_BYTE,
+            image
+        );
+
             /*  the view matrix from the SimpleRotator object.*/
         let rotation = spaceball.getViewMatrix();
     
@@ -140,8 +246,8 @@ function Model(name) {
         let modelViewProjection = m4.multiply(projectionViewMatrix, modelMatrix);
         modelViewProjection = m4.multiply(modelViewProjection, ModelViewMatrix);
 
-        let test = m4.multiply(ProjectionMatrix, translation);
-        gl.uniformMatrix4fv(shProgram.iStereoMatrix, false, test);
+        let stereoMatrix = m4.multiply(ProjectionMatrix, translation);
+        gl.uniformMatrix4fv(shProgram.iStereoMatrix, false, stereoMatrix);
 
         var worldInverseMatrix = m4.inverse(modelMatrix);
         var worldInverseTransposeMatrix = m4.transpose(worldInverseMatrix);
@@ -160,19 +266,19 @@ function Model(name) {
         gl.uniform3fv(shProgram.iCamWorldPosition, CameraPosition);
         gl.uniform3fv(shProgram.iLightDirection, GetDirLightDirection());
 
-        gl.uniform2fv(shProgram.iRotationPoint, texturePoint);
+        //gl.uniform2fv(shProgram.iRotationPoint, texturePoint);
 
         let point = CalculateCorrugatedSpherePoint(map(texturePoint[0], 0, 1,phiMin, phiMax), map(texturePoint[1], 0, 1,vMin, vMax));
         gl.uniform3fv(shProgram.iPointVizualizationPosition, [point.x, point.y, point.z]);
         gl.uniform1f(shProgram.iRotationValue, rotateValue);
-        
-        gl.bindBuffer(gl.ARRAY_BUFFER, this.iVertexBuffer);
-        gl.vertexAttribPointer(shProgram.iAttribVertex, 3, gl.FLOAT, false, 0, 0);
-        gl.enableVertexAttribArray(shProgram.iAttribVertex);
 
         gl.bindBuffer(gl.ARRAY_BUFFER, this.iNormalBuffer);
         gl.vertexAttribPointer(shProgram.iNormalVertex, 3, gl.FLOAT, false, 0, 0);
         gl.enableVertexAttribArray(shProgram.iNormalVertex);
+        
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.iVertexBuffer);
+        gl.vertexAttribPointer(shProgram.iAttribVertex, 3, gl.FLOAT, false, 0, 0);
+        gl.enableVertexAttribArray(shProgram.iAttribVertex);
 
         gl.bindBuffer(gl.ARRAY_BUFFER, this.iTextureBuffer);
         gl.vertexAttribPointer(shProgram.iTextureCoords2D, 2, gl.FLOAT, false, 0, 0);
@@ -190,6 +296,11 @@ function ShaderProgram(name, program) {
 
     this.name = name;
     this.prog = program;
+
+    this.iModelViewMatrix = -1;
+    this.iAttribTexture = -1;
+    this.iAttribVertex = -1;
+    this.iProjectionMatrix = -1;
 
     this.iSolidColor = -1;
     this.iAttribVertex = -1;
@@ -228,6 +339,11 @@ function SwitchShowPath(){
     draw();
 }
 
+function requestNewFrame() {
+    draw();
+    window.requestAnimationFrame(requestNewFrame);
+}
+
 
 /* Draws a colored cube, along with a set of coordinate axes.
  * (Note that the use of the above drawPrimitive function is not an efficient
@@ -242,30 +358,32 @@ function draw() {
     let projectionMatrix = m4.perspective(Math.PI / 8, 2, 1, 40);
     const viewMatrix = m4.lookAt(CameraPosition, WorldOrigin, [0, 1, 0]);
     const camRotation = m4.axisRotation([0, 1, 0], 179);
-    const projectionViewMatrix = m4.multiply(projectionMatrix, m4.multiply(viewMatrix, camRotation));
+    const projectionViewMatrix = m4.multiply(projectionMatrix, viewMatrix);
 
     //lineProgram.Use();
     //line.Draw(projectionViewMatrix);
 
     if(ShowPath){
         segmentProgram.Use();
-        segment.Draw(projectionViewMatrix);
+        segment.Draw(projectionMatrix);
     }
-    
-    shProgram.Use()
-    ReadInput();
 
-    gl.colorMask(false, true, true, false);
+    ReadInput();
+    
+    gl.colorMask(true, true, true, true);
+    plane.Draw(projectionMatrix);
+    shProgram.Use()
+
+    gl.colorMask(true, false, false, false);
     camera.ApplyRightFrustum();
-    surface.Draw(projectionViewMatrix, camera.mRightProjectionMatrix, camera.mRightModelViewMatrix);
+    surface.Draw(projectionMatrix, camera.mRightProjectionMatrix, camera.mRightModelViewMatrix);
 
     gl.clear(gl.DEPTH_BUFFER_BIT);
 
     camera.ApplyLeftFrustum();
-    gl.colorMask(true, false, false, false);
-    surface.Draw(projectionViewMatrix, camera.mLeftProjectionMatrix, camera.mLeftModelViewMatrix);
+    gl.colorMask(false, true, true, false);
 
-    gl.colorMask(true, true, true, true);
+    surface.Draw(projectionMatrix, camera.mLeftProjectionMatrix, camera.mLeftModelViewMatrix);
 }
 
 function GetDirLightDirection(){
@@ -400,16 +518,6 @@ function CalculateCorrugatedSpherePoint(phi, v) {
 
 
 
-/* Initialize the WebGL context. Called from init() */
-function initGL() {
-
-
-    LoadTexture();
-
-    gl.enable(gl.DEPTH_TEST);
-    gl.enable(gl.CULL_FACE);
-}
-
 function SetupSegment(){
     let prog = createProgram(gl, LineVertexShaderSource, LineFragmentShaderSource);
 
@@ -483,6 +591,11 @@ function SetupSurface(){
     shProgram.iPointVizualizationPosition = gl.getUniformLocation(prog, "pointVizualizationPosition");
 
     shProgram.iStereoMatrix = gl.getUniformLocation(prog, "StereoMatrix");
+
+    shProgram.iAttribVertex = gl.getAttribLocation(prog, "vertex");
+    shProgram.iAttribTexture = gl.getAttribLocation(prog, "texture");
+    shProgram.iModelViewMatrix = gl.getUniformLocation(prog, "ModelViewMatrix"); 
+    shProgram.iProjectionMatrix = gl.getUniformLocation(prog, "ProjectionMatrix");
 }
 
 
@@ -590,17 +703,17 @@ window.onkeydown = (e) => {
 let isLoadedTexture = false;
 
 function LoadTexture() {
-    let texture = gl.createTexture();
-    gl.bindTexture(gl.TEXTURE_2D, texture);
+    textureModel = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, textureModel);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
 
-    const image = new Image();
+    image = new Image();
     image.crossOrigin = 'anonymus';
 
     image.src = "https://raw.githubusercontent.com/Sykess3/WebGL-basics/CGW/texture.jpg";
     image.onload = () => {
-        gl.bindTexture(gl.TEXTURE_2D, texture);
+        gl.bindTexture(gl.TEXTURE_2D, textureModel);
         gl.texImage2D(
             gl.TEXTURE_2D,
             0,
@@ -619,8 +732,7 @@ function LoadTexture() {
         SetupSegment();
         BuildSegment();
 
-
-        draw()
+        requestNewFrame();
     }
 }
 
@@ -704,6 +816,24 @@ function StereoCamera(
             0.0
         );
     };
+}
+
+function getWebcam() {
+    navigator.getUserMedia({ video: true, audio: false }, function (stream) {
+        video.srcObject = stream;
+        track = stream.getTracks()[0];
+    }, function (e) {
+        console.error('Rejected', e);
+    });
+}
+
+function CreateWebCamTexture() {
+    textureVID = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, textureVID);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 }
 
 function ReadInput() {

@@ -128,3 +128,33 @@ uniform vec4 color;
 void main() {
     gl_FragColor = color;
 }`;
+
+const vertexShaderPlane = `
+
+attribute vec3 vertex;
+attribute vec2 texture;
+uniform mat4 ModelViewMatrix;
+uniform mat4 ProjectionMatrix;
+
+varying vec2 v_texcoord;
+void main() {
+    v_texcoord = texture;
+    vec4 vertPos4 = ModelViewMatrix * vec4(vertex, 1.0);
+    gl_Position = ProjectionMatrix*vertPos4;
+}`;
+
+const fragmentShaderPlane = `
+#ifdef GL_FRAGMENT_PRECISION_HIGH
+   precision highp float;
+#else
+   precision mediump float;
+#endif
+
+varying vec2 v_texcoord;
+uniform sampler2D tmu;
+
+void main() {
+    // Apply texture
+    vec4 texColor = texture2D(tmu, v_texcoord);
+    gl_FragColor = texColor;
+}`;
