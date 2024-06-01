@@ -2,7 +2,7 @@
 
 let gl;                         // The webgl context.
 let surface;                    // A surface model
-let shProgram;                  // A shader program
+//let shProgram;                  // A shader program
 let spaceball;                  // A SimpleRotator object that lets the user rotate the view by mouse.
 let lineProgram;
 let line;
@@ -39,6 +39,7 @@ let rotateValue = 0;
 let plane; 
 let camera;
 let textureVID, video, track;
+let useFilter = true;
 
 function SwitchAnimation(){
 
@@ -155,7 +156,6 @@ function Plane(program){
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, this.count);
     }
 }
-
 /* Initialize the WebGL context. Called from init() */
 function initGL() {
 
@@ -164,6 +164,7 @@ function initGL() {
     window.vid = video;
     getWebcam();
     CreateWebCamTexture();
+    createAudio();
 
     let prog = createProgram(gl, vertexShaderPlane, fragmentShaderPlane);
     let test = new ShaderProgram('Segment', prog);
@@ -189,6 +190,23 @@ function initGL() {
 
     LoadTexture();
 
+    window.addEventListener('devicemotion', (event) => {
+        if(audioPanner) {
+            audioPosition.x += deg2rad(event.acceleration.x);
+            audioPosition.y += deg2rad(event.acceleration.y);
+            audioPosition.z += deg2rad(event.acceleration.z);
+    
+            sphereRotation.x = 2 * Math.cos(audioPosition.y) * Math.cos(audioPosition.x);
+            sphereRotation.y = 2 * Math.sin(audioPosition.y);
+            sphereRotation.z = 2 * Math.cos(audioPosition.y) * Math.sin(audioPosition.z);
+    
+            audioPanner.setPosition(sphereRotation.x, sphereRotation.y, sphereRotation.z);
+            audioPanner.setOrientation(0,0,0);
+        }
+    });
+
+    setupUseFilterEvent();
+
     gl.enable(gl.DEPTH_TEST);
     gl.enable(gl.CULL_FACE);
 }
@@ -199,9 +217,51 @@ function Model(name) {
     this.iVertexBuffer = gl.createBuffer();
     this.iNormalBuffer = gl.createBuffer();
     this.iTextureBuffer = gl.createBuffer();
+    this.isSphere = false;
 
     this.count = 0;
     this.countTexture = 0;
+
+    this.SetupSurface = function () {
+
+        let prog = createProgram(gl, vertexShaderSource, fragmentShaderSource);
+    
+        this.shProgram = new ShaderProgram('Basic', prog);
+        this.shProgram.Use();
+        this.shProgram.iAttribVertex = gl.getAttribLocation(prog, "vertex");
+        this.shProgram.iTextureCoords2D = gl.getAttribLocation(prog, "textureCoord");
+        this.shProgram.iNormalVertex = gl.getAttribLocation(prog, "normal");
+        this.shProgram.iWorldInverseTranspose = gl.getUniformLocation(prog, "WorldInverseTranspose");
+        this.shProgram.iModelViewProjectionMatrix = gl.getUniformLocation(prog, "ModelViewProjectionMatrix");
+        this.shProgram.iMatAmbientColor = gl.getUniformLocation(prog, "matAmbientColor");
+        this.shProgram.iMatDiffuseColor = gl.getUniformLocation(prog, "matDiffuseColor");
+        this.shProgram.iMatSpecularColor = gl.getUniformLocation(prog, "matSpecularColor");
+        this.shProgram.iMatShininess = gl.getUniformLocation(prog, "matShininess");
+        this.shProgram.iLSAmbientColor = gl.getUniformLocation(prog, "lsAmbientColor");
+        this.shProgram.iLSDiffuseColor = gl.getUniformLocation(prog, "lsDiffuseColor");
+        this.shProgram.iLSSpecularColor = gl.getUniformLocation(prog, "lsSpecularColor");
+        this.shProgram.iIsSphere = gl.getUniformLocation(prog, "isSphere");
+
+        this.shProgram.iLightDirection = gl.getUniformLocation(prog, "LightDirection");
+        this.shProgram.iCamWorldPosition = gl.getUniformLocation(prog, "CamWorldPosition"); 
+        this.shProgram.iTexture = gl.getUniformLocation(prog, "texture"); 
+        this.shProgram.iRotationPoint = gl.getUniformLocation(prog, "rotationPoint");
+        this.shProgram.iRotationValue = gl.getUniformLocation(prog, "rotationValue");
+        this.shProgram.iPointVizualizationPosition = gl.getUniformLocation(prog, "pointVizualizationPosition");
+        this.shProgram.iStereoMatrix = gl.getUniformLocation(prog, "StereoMatrix");
+        this.shProgram.iAttribVertex = gl.getAttribLocation(prog, "vertex");
+        this.shProgram.iAttribTexture = gl.getAttribLocation(prog, "texture");
+        this.shProgram.iModelViewMatrix = gl.getUniformLocation(prog, "ModelViewMatrix"); 
+        this.shProgram.iProjectionMatrix = gl.getUniformLocation(prog, "ProjectionMatrix");
+    }
+    
+    this.BufferData = function (vertices) {
+
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.iVertexBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STREAM_DRAW);
+
+        this.count = vertices.length / 3;
+    }
 
     this.BufferData = function (vertices, normals) {
 
@@ -224,67 +284,81 @@ function Model(name) {
 
     this.Draw = function (projectionViewMatrix, ProjectionMatrix, ModelViewMatrix) {
 
-        gl.bindTexture(gl.TEXTURE_2D, textureModel);
-        gl.texImage2D(
-            gl.TEXTURE_2D,
-            0,
-            gl.RGBA,
-            gl.RGBA,
-            gl.UNSIGNED_BYTE,
-            image
-        );
+        this.shProgram.Use();
+        if(!this.isSphere)
+        {
+            gl.bindTexture(gl.TEXTURE_2D, textureModel);
+            gl.texImage2D(
+                gl.TEXTURE_2D,
+                0,
+                gl.RGBA,
+                gl.RGBA,
+                gl.UNSIGNED_BYTE,
+                image
+            );
+
+        }
 
             /*  the view matrix from the SimpleRotator object.*/
         let rotation = spaceball.getViewMatrix();
     
-        let translation = m4.translation(World_X, World_Y, World_Z);
-    
+        let translation = m4.translation(World_X, World_Y, World_Z - this.isSphere * 2);
         let modelMatrix = m4.multiply(translation, rotation);
     
         /* Multiply the projection matrix times the modelview matrix to give the
            combined transformation matrix, and send that to the shader program. */
         let modelViewProjection = m4.multiply(projectionViewMatrix, modelMatrix);
-        modelViewProjection = m4.multiply(modelViewProjection, ModelViewMatrix);
 
-        let stereoMatrix = m4.multiply(ProjectionMatrix, translation);
-        gl.uniformMatrix4fv(shProgram.iStereoMatrix, false, stereoMatrix);
+        if(this.isSphere){
+            gl.uniformMatrix4fv(this.shProgram.iStereoMatrix, false, m4.identity());
+        }
+        else{
+            modelViewProjection = m4.multiply(modelViewProjection, ModelViewMatrix);
+            let stereoMatrix = m4.multiply(ProjectionMatrix, translation);
+            gl.uniformMatrix4fv(this.shProgram.iStereoMatrix, false, stereoMatrix);
+        }
+
+        gl.uniform1i(this.shProgram.iIsSphere, this.isSphere);
 
         var worldInverseMatrix = m4.inverse(modelMatrix);
         var worldInverseTransposeMatrix = m4.transpose(worldInverseMatrix);
-        gl.uniformMatrix4fv(shProgram.iModelViewProjectionMatrix, false, modelViewProjection);
-        gl.uniformMatrix4fv(shProgram.iWorldInverseTranspose, false, worldInverseTransposeMatrix);
+        gl.uniformMatrix4fv(this.shProgram.iModelViewProjectionMatrix, false, modelViewProjection);
+        gl.uniformMatrix4fv(this.shProgram.iWorldInverseTranspose, false, worldInverseTransposeMatrix);
     
-        gl.uniform3fv(shProgram.iMatAmbientColor, AmbientColor);
-        gl.uniform3fv(shProgram.iMatDiffuseColor, DiffuseColor);
-        gl.uniform3fv(shProgram.iMatSpecularColor, SpecularColor);
-        gl.uniform1f(shProgram.iMatShininess, Shininess);
-    
-        gl.uniform3fv(shProgram.iLSAmbientColor, [0.1, 0.1, 0.1]);
-        gl.uniform3fv(shProgram.iLSDiffuseColor, [LightIntensity, LightIntensity, LightIntensity]);
-        gl.uniform3fv(shProgram.iLSSpecularColor, [1, 1, 1]);
-    
-        gl.uniform3fv(shProgram.iCamWorldPosition, CameraPosition);
-        gl.uniform3fv(shProgram.iLightDirection, GetDirLightDirection());
-
-        //gl.uniform2fv(shProgram.iRotationPoint, texturePoint);
-
-        let point = CalculateCorrugatedSpherePoint(map(texturePoint[0], 0, 1,phiMin, phiMax), map(texturePoint[1], 0, 1,vMin, vMax));
-        gl.uniform3fv(shProgram.iPointVizualizationPosition, [point.x, point.y, point.z]);
-        gl.uniform1f(shProgram.iRotationValue, rotateValue);
-
-        gl.bindBuffer(gl.ARRAY_BUFFER, this.iNormalBuffer);
-        gl.vertexAttribPointer(shProgram.iNormalVertex, 3, gl.FLOAT, false, 0, 0);
-        gl.enableVertexAttribArray(shProgram.iNormalVertex);
+        if(!this.isSphere)
+            {
+                gl.uniform3fv(this.shProgram.iMatAmbientColor, AmbientColor);
+                gl.uniform3fv(this.shProgram.iMatDiffuseColor, DiffuseColor);
+                gl.uniform3fv(this.shProgram.iMatSpecularColor, SpecularColor);
+                gl.uniform1f(this.shProgram.iMatShininess, Shininess);
+            
+                gl.uniform3fv(this.shProgram.iLSAmbientColor, [0.1, 0.1, 0.1]);
+                gl.uniform3fv(this.shProgram.iLSDiffuseColor, [LightIntensity, LightIntensity, LightIntensity]);
+                gl.uniform3fv(this.shProgram.iLSSpecularColor, [1, 1, 1]);
+            
+                gl.uniform3fv(this.shProgram.iCamWorldPosition, CameraPosition);
+                gl.uniform3fv(this.shProgram.iLightDirection, GetDirLightDirection());
         
-        gl.bindBuffer(gl.ARRAY_BUFFER, this.iVertexBuffer);
-        gl.vertexAttribPointer(shProgram.iAttribVertex, 3, gl.FLOAT, false, 0, 0);
-        gl.enableVertexAttribArray(shProgram.iAttribVertex);
+                //gl.uniform2fv(shProgram.iRotationPoint, texturePoint);
+        
+                let point = CalculateCorrugatedSpherePoint(map(texturePoint[0], 0, 1,phiMin, phiMax), map(texturePoint[1], 0, 1,vMin, vMax));
+                gl.uniform3fv(this.shProgram.iPointVizualizationPosition, [point.x, point.y, point.z]);
+                gl.uniform1f(this.shProgram.iRotationValue, rotateValue);
+        
+                gl.bindBuffer(gl.ARRAY_BUFFER, this.iNormalBuffer);
+                gl.vertexAttribPointer(this.shProgram.iNormalVertex, 3, gl.FLOAT, false, 0, 0);
+                gl.enableVertexAttribArray(this.shProgram.iNormalVertex);
+            
+                gl.bindBuffer(gl.ARRAY_BUFFER, this.iTextureBuffer);
+                gl.vertexAttribPointer(this.shProgram.iTextureCoords2D, 2, gl.FLOAT, false, 0, 0);
+                gl.enableVertexAttribArray(this.shProgram.iTextureCoords2D);
+                gl.uniform1i(this.shProgram.iTexture, 0);
+                gl.enable(gl.TEXTURE_2D);
+            }
 
-        gl.bindBuffer(gl.ARRAY_BUFFER, this.iTextureBuffer);
-        gl.vertexAttribPointer(shProgram.iTextureCoords2D, 2, gl.FLOAT, false, 0, 0);
-        gl.enableVertexAttribArray(shProgram.iTextureCoords2D);
-        gl.uniform1i(shProgram.iTexture, 0);
-        gl.enable(gl.TEXTURE_2D);
+            gl.bindBuffer(gl.ARRAY_BUFFER, this.iVertexBuffer);
+            gl.vertexAttribPointer(this.shProgram.iAttribVertex, 3, gl.FLOAT, false, 0, 0);
+            gl.enableVertexAttribArray(this.shProgram.iAttribVertex);
 
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, this.count);
     }
@@ -314,6 +388,7 @@ function ShaderProgram(name, program) {
     this.iLSAmbientColor = -1;
     this.iLSDiffuseColor = -1;
     this.iLSSpecularColor = -1;
+    this.iIsSphere= -1;
 
     this.iMatAmbientColor = -1;
     this.iMatDiffuseColor = -1;
@@ -344,6 +419,22 @@ function requestNewFrame() {
     window.requestAnimationFrame(requestNewFrame);
 }
 
+let audioPlay;
+function playMusic() {
+    if (audioPlay) {
+        audioContext.suspend();
+        document.getElementById('play-audio-btn').textContent = 'Resume';
+    } else {
+        if (audioContext && audioContext.state === 'suspended') {
+            audioContext.resume();
+        } else {
+            createAudio();
+        }
+        document.getElementById('play-audio-btn').textContent = 'Stop';
+    }
+    audioPlay = !audioPlay;
+}
+
 
 /* Draws a colored cube, along with a set of coordinate axes.
  * (Note that the use of the above drawPrimitive function is not an efficient
@@ -369,10 +460,10 @@ function draw() {
     }
 
     ReadInput();
+
     
     gl.colorMask(true, true, true, true);
     plane.Draw(projectionMatrix);
-    shProgram.Use()
 
     gl.colorMask(true, false, false, false);
     camera.ApplyRightFrustum();
@@ -384,6 +475,12 @@ function draw() {
     gl.colorMask(false, true, true, false);
 
     surface.Draw(projectionMatrix, camera.mLeftProjectionMatrix, camera.mLeftModelViewMatrix);
+
+    
+    gl.clear(gl.DEPTH_BUFFER_BIT);
+    gl.colorMask(true, true, true, true);
+    camera.ApplyRightFrustum();
+    sphere.Draw(projectionMatrix, camera.mRightProjectionMatrix, camera.mRightModelViewMatrix);
 }
 
 function GetDirLightDirection(){
@@ -551,51 +648,51 @@ function BuildLine(){
     line.BufferData([...WorldOrigin, ...LightPosition])
 }
 
+let sphere;
 function BuildSurface(){
     surface = new Model('Surface');
     let data = CreateSurfaceData();
     surface.BufferData(data[0], data[1]);
     surface.TextureBufferData(data[2]);
+    surface.SetupSurface();
+
+    sphere = new Model('Surface');
+    sphere.isSphere = true;
+    let spheredata = CreateSphere();
+    sphere.BufferData(spheredata);
+    sphere.SetupSurface();
 }
 
-function SetupSurface(){
 
-    let prog = createProgram(gl, vertexShaderSource, fragmentShaderSource);
+let audioPosition = {
+    x: 0,
+    y: 0,
+    z: 0
+};
 
-    shProgram = new ShaderProgram('Basic', prog);
-    shProgram.Use();
-
-    shProgram.iAttribVertex = gl.getAttribLocation(prog, "vertex");
-    shProgram.iTextureCoords2D = gl.getAttribLocation(prog, "textureCoord");
-
-    shProgram.iNormalVertex = gl.getAttribLocation(prog, "normal");
-
-    shProgram.iWorldInverseTranspose = gl.getUniformLocation(prog, "WorldInverseTranspose");
-    shProgram.iModelViewProjectionMatrix = gl.getUniformLocation(prog, "ModelViewProjectionMatrix");
-
-    shProgram.iMatAmbientColor = gl.getUniformLocation(prog, "matAmbientColor");
-    shProgram.iMatDiffuseColor = gl.getUniformLocation(prog, "matDiffuseColor");
-    shProgram.iMatSpecularColor = gl.getUniformLocation(prog, "matSpecularColor");
-    shProgram.iMatShininess = gl.getUniformLocation(prog, "matShininess");
-
-    shProgram.iLSAmbientColor = gl.getUniformLocation(prog, "lsAmbientColor");
-    shProgram.iLSDiffuseColor = gl.getUniformLocation(prog, "lsDiffuseColor");
-    shProgram.iLSSpecularColor = gl.getUniformLocation(prog, "lsSpecularColor");
-
-    shProgram.iLightDirection = gl.getUniformLocation(prog, "LightDirection");
-    shProgram.iCamWorldPosition = gl.getUniformLocation(prog, "CamWorldPosition"); 
-
-    shProgram.iTexture = gl.getUniformLocation(prog, "texture"); 
-    shProgram.iRotationPoint = gl.getUniformLocation(prog, "rotationPoint");
-    shProgram.iRotationValue = gl.getUniformLocation(prog, "rotationValue");
-    shProgram.iPointVizualizationPosition = gl.getUniformLocation(prog, "pointVizualizationPosition");
-
-    shProgram.iStereoMatrix = gl.getUniformLocation(prog, "StereoMatrix");
-
-    shProgram.iAttribVertex = gl.getAttribLocation(prog, "vertex");
-    shProgram.iAttribTexture = gl.getAttribLocation(prog, "texture");
-    shProgram.iModelViewMatrix = gl.getUniformLocation(prog, "ModelViewMatrix"); 
-    shProgram.iProjectionMatrix = gl.getUniformLocation(prog, "ProjectionMatrix");
+let sphereRotation = {
+    x: 0,
+    y: 0,
+    z: 0
+};
+function CreateSphere()
+{
+    let radius = 0.1;
+    let vertexList = [];
+    const stepU = 10;
+    for (let u = 0; u <= 360; u += stepU) {
+        for(let v = 0; v <= 360; v += stepU) {
+            let alpha = deg2rad(u);
+            let beta = deg2rad(v);
+            let alpha2 = deg2rad(u + stepU);
+            let beta2 = deg2rad(v + stepU);
+            vertexList.push(sphereRotation.x +  (radius *  Math.cos(alpha) * Math.sin(beta)),sphereRotation.y +
+                (radius *  Math.sin(alpha) * Math.sin(beta)),sphereRotation.z + (radius *  Math.cos(beta)));
+            vertexList.push(sphereRotation.x +  (radius *  Math.cos(alpha2) * Math.sin(beta2)),sphereRotation.y +
+                (radius *  Math.sin(alpha2) * Math.sin(beta2)),sphereRotation.z + (radius *  Math.cos(beta2)));
+        }
+    }
+    return vertexList;
 }
 
 
@@ -723,7 +820,6 @@ function LoadTexture() {
             image
         );
 
-        SetupSurface();
         BuildSurface();
     
         SetupLine();
@@ -819,11 +915,11 @@ function StereoCamera(
 }
 
 function getWebcam() {
-    navigator.getUserMedia({ video: true, audio: false }, function (stream) {
+    let constraints = {video: true, audio: false};
+    navigator.getUserMedia(constraints, function (stream) {
         video.srcObject = stream;
-        track = stream.getTracks()[0];
     }, function (e) {
-        console.error('Rejected', e);
+        console.error('Can\'t find a Web camera', e);
     });
 }
 
@@ -850,3 +946,77 @@ function ReadInput() {
     camera.mConvergence = convergence;
 }
 
+let audioContext;
+let audioSource;
+function createAudio() {
+    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    audioSource = audioContext.createBufferSource();
+    createBandpassFilter();
+    createAudioPanner();
+    
+    const request = new XMLHttpRequest();
+    request.open("GET", "https://raw.githubusercontent.com/Sykess3/WebGL-basics/CGW/sound.mp3", true);
+    request.responseType = "arraybuffer";
+    request.onload = () => {
+        const audioData = request.response;
+        audioContext.decodeAudioData(audioData, (buffer) => {
+            audioSource.buffer = buffer;
+            if (useFilter) {
+                audioSource.connect(audioFilter);
+                audioFilter.connect(audioPanner);
+            } else {
+                audioSource.connect(audioPanner);
+            }
+            audioPanner.connect(audioContext.destination);
+            audioSource.loop = true;
+            audioSource.start(0); 
+        }, (err) => {alert(err)});
+    };
+    request.send();
+}
+
+let audioFilter;
+function createBandpassFilter() {
+    audioFilter = audioContext.createBiquadFilter();
+    audioFilter.type = "highpass";
+    audioFilter.frequency.value = 1000;
+    audioFilter.Q.value = 1;
+}
+
+
+let audioPanner;
+function createAudioPanner() {
+    audioPanner = audioContext.createPanner();
+    audioPanner.panningModel = "HRTF";
+    audioPanner.distanceModel = "inverse";
+    audioPanner.refDistance = 1;
+    audioPanner.maxDistance = 1000;
+    audioPanner.rolloffFactor = 1;
+    audioPanner.coneInnerAngle = 360;
+    audioPanner.coneOuterAngle = 0;
+    audioPanner.coneOuterGain = 0;
+}
+
+function setupUseFilterEvent() {
+    const checkbox = document.getElementById('useFilter');
+    checkbox.addEventListener('change', (event) => {
+        if (event.target.checked) {
+            useFilter = true;
+            if (audioContext) {
+                audioSource.disconnect();
+                audioPanner.disconnect();
+                audioSource.connect(audioFilter);
+                audioFilter.connect(audioPanner);
+                audioFilter.connect(audioContext.destination);
+            }
+        } else {
+            useFilter = false;
+            if (audioContext) {
+                audioSource.disconnect();
+                audioPanner.disconnect();
+                audioSource.connect(audioPanner);
+                audioPanner.connect(audioContext.destination);
+            }
+        }
+    });
+}
