@@ -61,12 +61,14 @@ function ExecuteAnimation(){
     if(!isAnimating){
         return;
     }
-    let deltaTime = 1000 / fps;
-    LightPosition[0] = (Math.sin(currentAnimationTime / 500) * 2 * ModelRadius * GetNormalizedAnimVelocity()[0]);
-    LightPosition[1] = (Math.sin(currentAnimationTime / 500) * 2 * ModelRadius * GetNormalizedAnimVelocity()[1]);
+    let deltaTime = 10 / fps;
+    sphereRotation.x = (Math.sin(currentAnimationTime / 500 * 100) * ModelRadius / 5);
+    sphereRotation.y = (Math.cos(currentAnimationTime / 500 * 100) * ModelRadius / 5) * 1.2;
+    sphereRotation.z = (Math.sin(currentAnimationTime / 500 * 100) * ModelRadius / 5) + (Math.cos(currentAnimationTime / 500 * 100) * ModelRadius / 4);
 
-    BuildLine();
-    draw();
+    audioPanner.setPosition(sphereRotation.x, sphereRotation.y, 0);
+    audioPanner.setOrientation(0,0,0);
+
     currentAnimationTime += deltaTime;
     setTimeout(() => {
         reqAnim = window.requestAnimationFrame(ExecuteAnimation);    
@@ -156,52 +158,57 @@ function Plane(program){
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, this.count);
     }
 }
+let receivedInCurrentFrame = false;
 /* Initialize the WebGL context. Called from init() */
 function initGL() {
 
     video = document.createElement('video');
     video.setAttribute('autoplay', true);
     window.vid = video;
-    getWebcam();
-    CreateWebCamTexture();
-    createAudio();
+    //getWebcam();
+    //CreateWebCamTexture();
+    //createAudio();
 
     let prog = createProgram(gl, vertexShaderPlane, fragmentShaderPlane);
     let test = new ShaderProgram('Segment', prog);
-    plane = new Plane(test);
+    //plane = new Plane(test);
     test.Use();
     let planeSize = 4;
-    plane.BufferData([
+    /*plane.BufferData([
         0.0, 0.0, 0.0, 
         planeSize * 2 , planeSize, 0.0,
         planeSize * 2, 0.0, 0.0, 
         0.0, 0.0, 0.0, 
         planeSize * 2, planeSize, 0.0,
         0.0, planeSize, 0.0
-    ]);
-    plane.TextureBufferData([
+    ]);*/
+    /*plane.TextureBufferData([
         0.0, 0.0, // Bottom-left
         1.0, 1.0, // Top-right
         1.0, 0.0, // Bottom-right
         0.0, 0.0, // Bottom-left (repeat to close the quad)
         1.0, 1.0, // Top-right (repeat)
         0.0, 1.0  // Top-left
-    ]);
+    ]);*/
 
     LoadTexture();
 
-    window.addEventListener('devicemotion', (event) => {
+    window.addEventListener('deviceorientation', (event) => {
+        //alert(`Audio Position:\nX: ${audioPosition.x}\nY: ${audioPosition.y}\nZ: ${audioPosition.z}`);
+        if(receivedInCurrentFrame){
+        return;
+        }
         if(audioPanner) {
-            audioPosition.x += deg2rad(event.acceleration.x);
-            audioPosition.y += deg2rad(event.acceleration.y);
-            audioPosition.z += deg2rad(event.acceleration.z);
+            audioPosition.x += deg2rad(event.alpha);
+            audioPosition.y += deg2rad(event.beta);
+            audioPosition.z += deg2rad(event.gamma);
+
     
             sphereRotation.x = 2 * Math.cos(audioPosition.y) * Math.cos(audioPosition.x);
             sphereRotation.y = 2 * Math.sin(audioPosition.y);
             sphereRotation.z = 2 * Math.cos(audioPosition.y) * Math.sin(audioPosition.z);
-    
-            audioPanner.setPosition(sphereRotation.x, sphereRotation.y, sphereRotation.z);
-            audioPanner.setOrientation(0,0,0);
+
+            receivedInCurrentFrame = true;
         }
     });
 
@@ -301,22 +308,32 @@ function Model(name) {
 
             /*  the view matrix from the SimpleRotator object.*/
         let rotation = spaceball.getViewMatrix();
-    
-        let translation = m4.translation(World_X, World_Y, World_Z - this.isSphere * 2);
-        let modelMatrix = m4.multiply(translation, rotation);
+
+        let translation;
+        if(this.isSphere){
+            translation = m4.translation(sphereRotation.x, sphereRotation.y, World_Z);
+        }
+        else{
+            translation = m4.translation(World_X, World_Y, World_Z);
+        }
+
+        let modelMatrix;
+        if(!this.isSphere)
+            {
+                modelMatrix = m4.multiply(translation, rotation);
+        }
+        else{
+            modelMatrix = m4.multiply(translation, m4.identity());
+        }
     
         /* Multiply the projection matrix times the modelview matrix to give the
            combined transformation matrix, and send that to the shader program. */
         let modelViewProjection = m4.multiply(projectionViewMatrix, modelMatrix);
 
-        if(this.isSphere){
-            gl.uniformMatrix4fv(this.shProgram.iStereoMatrix, false, m4.identity());
-        }
-        else{
-            modelViewProjection = m4.multiply(modelViewProjection, ModelViewMatrix);
-            let stereoMatrix = m4.multiply(ProjectionMatrix, translation);
-            gl.uniformMatrix4fv(this.shProgram.iStereoMatrix, false, stereoMatrix);
-        }
+
+        modelViewProjection = m4.multiply(modelViewProjection, ModelViewMatrix);
+        let stereoMatrix = m4.multiply(ProjectionMatrix, translation);
+        gl.uniformMatrix4fv(this.shProgram.iStereoMatrix, false, stereoMatrix);
 
         gl.uniform1i(this.shProgram.iIsSphere, this.isSphere);
 
@@ -415,6 +432,7 @@ function SwitchShowPath(){
 }
 
 function requestNewFrame() {
+    receivedInCurrentFrame = false;
     draw();
     window.requestAnimationFrame(requestNewFrame);
 }
@@ -433,6 +451,8 @@ function playMusic() {
         document.getElementById('play-audio-btn').textContent = 'Stop';
     }
     audioPlay = !audioPlay;
+
+    SwitchAnimation();
 }
 
 
@@ -441,6 +461,11 @@ function playMusic() {
  * way to draw with WebGL.  Here, the geometry is so simple that it doesn't matter.)
  */
 function draw() {
+
+    if(surface == undefined){
+        return;
+    }
+
     gl.clearColor(0, 0, 0, 1);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
@@ -460,14 +485,14 @@ function draw() {
     }
 
     ReadInput();
-
     
     gl.colorMask(true, true, true, true);
-    plane.Draw(projectionMatrix);
+    //plane.Draw(projectionMatrix);
 
     gl.colorMask(true, false, false, false);
     camera.ApplyRightFrustum();
     surface.Draw(projectionMatrix, camera.mRightProjectionMatrix, camera.mRightModelViewMatrix);
+    sphere.Draw(projectionMatrix, camera.mRightProjectionMatrix, camera.mRightModelViewMatrix);
 
     gl.clear(gl.DEPTH_BUFFER_BIT);
 
@@ -475,12 +500,11 @@ function draw() {
     gl.colorMask(false, true, true, false);
 
     surface.Draw(projectionMatrix, camera.mLeftProjectionMatrix, camera.mLeftModelViewMatrix);
-
+    sphere.Draw(projectionMatrix, camera.mLeftProjectionMatrix, camera.mLeftModelViewMatrix);
     
     gl.clear(gl.DEPTH_BUFFER_BIT);
     gl.colorMask(true, true, true, true);
-    camera.ApplyRightFrustum();
-    sphere.Draw(projectionMatrix, camera.mRightProjectionMatrix, camera.mRightModelViewMatrix);
+
 }
 
 function GetDirLightDirection(){
@@ -677,7 +701,10 @@ let sphereRotation = {
 };
 function CreateSphere()
 {
-    let radius = 0.1;
+    //sphereRotation.x = 0;
+    //sphereRotation.y = 0;
+    //sphereRotation.z = 0;
+    let radius = 0.05;
     let vertexList = [];
     const stepU = 10;
     for (let u = 0; u <= 360; u += stepU) {
@@ -951,7 +978,7 @@ let audioSource;
 function createAudio() {
     audioContext = new (window.AudioContext || window.webkitAudioContext)();
     audioSource = audioContext.createBufferSource();
-    createBandpassFilter();
+    createHighpassFilter();
     createAudioPanner();
     
     const request = new XMLHttpRequest();
@@ -976,7 +1003,7 @@ function createAudio() {
 }
 
 let audioFilter;
-function createBandpassFilter() {
+function createHighpassFilter() {
     audioFilter = audioContext.createBiquadFilter();
     audioFilter.type = "highpass";
     audioFilter.frequency.value = 1000;
